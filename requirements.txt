@@ -1,0 +1,4 @@
+telethon>=1.41.0
+aiosqlite>=0.20.0
+langdetect>=1.0.9
+python-dotenv>=1.0.0

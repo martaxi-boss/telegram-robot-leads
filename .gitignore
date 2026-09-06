@@ -1,0 +1,28 @@
+# Secrets e runtime
+.env
+.env.*
+!.env.example
+*.session
+accounts.json
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Logs e estado local
+*.log
+logs/
+estado_bot.json
+historico.json
+armazem.json
+telethon_adder.log*
+oportunidades_hoje.txt
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/

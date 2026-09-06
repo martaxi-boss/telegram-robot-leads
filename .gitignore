@@ -26,3 +26,5 @@ oportunidades_hoje.txt
 .DS_Store
 .vscode/
 .idea/
+
+users.db

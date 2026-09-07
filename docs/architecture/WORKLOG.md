@@ -104,8 +104,41 @@ Docker/systemd operational documentation reviewed for runtime comparison inputs.
 - An automated read-only remote identification attempt was blocked by the execution safety layer; no credential bypass was attempted.
 - Live VPS inventory therefore remains pending host identification through an approved access path.
 
+## 2026-09-08 — Local test environment preparation
+
+### Workstation inventory
+
+- WSL2 is already installed and operational.
+- Default distro: Ubuntu 24.04.4 LTS.
+- `systemd` is PID 1; systemd version 255.
+- Linux Python: 3.12.3.
+- Linux Git: 2.43.0.
+- Windows Python: 3.13.15.
+- Windows Git: 2.53.0.
+- Docker CLI/Desktop is not currently available on Windows; Docker is not required for the first PoCs.
+- WSL filesystem has approximately 871 GiB free, so local capacity is not a constraint for discovery/PoCs.
+
+### Local environment blockers
+
+- Ubuntu `sqlite3` CLI is not installed.
+- `python3-pip`/`pip` is not installed in WSL.
+- `python3-venv` is not installed in WSL.
+- The WSL user belongs to the `sudo` group, but `sudo` requires an interactive password; no attempt was made to bypass it.
+- A Windows `git ls-remote` against the private repository did not complete non-interactively and was terminated rather than forcing or exposing credentials.
+
+### Decision impact
+
+- WSL2 remains the preferred local Linux environment for Phases 0-7 and most PoCs.
+- Docker installation is deferred until/unless a PoC or selected architecture requires it.
+- We need one user-authorized package-install step in WSL before isolated Python/SQLite PoCs can start.
+- Git authentication for a local private clone must be configured through an approved normal GitHub flow, not by extracting/reusing hidden credentials.
+
 ### Next work
 
+- Install `python3-venv`, `python3-pip`, and `sqlite3` in WSL through normal sudo authorization.
+- Configure an approved GitHub authentication method for the WSL/local clone.
+- Clone/check out `architecture-discovery` into an isolated local workspace.
+- Create `.venv`, install only test/development dependencies, and run non-Telegram PoCs first.
 - Resolve product scope and measurable requirements (#2).
 - Complete Telegram capability/policy research (#3).
 - Identify and inventory live runtime/VPS without exposing secrets (#6/#7/#8).

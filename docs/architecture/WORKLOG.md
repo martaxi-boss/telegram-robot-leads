@@ -58,9 +58,21 @@ Official EU source reviewed:
 - Accepted ADR-001: research-first architecture discovery before final implementation.
 - Started decision log and work log.
 
+### GitHub research tracking created
+
+- #1 Architecture Discovery Program — tracking issue.
+- #2 Product scope and measurable requirements.
+- #3 Telegram platform, policy and integration model.
+- #4 Data model, privacy, retention and suppression.
+- #5 Reliability, state machine and failure recovery.
+- #6 Security threat model and secrets/session controls.
+- #7 Runtime, infrastructure, deployment and recovery.
+- #8 Observability, health model and operational runbooks.
+- #9 Architecture alternatives, scoring matrix and critical PoCs.
+- #10 Critical remediation: remove historical `users.db` from Git safely.
+
 ### Next work
 
-- Create tracked research issues/workstreams.
 - Complete Telegram capability/permission matrix.
 - Inventory actual runtime/VPS state without committing secrets.
 - Define measurable product requirements with the project owner.

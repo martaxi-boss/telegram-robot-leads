@@ -10,6 +10,7 @@ This is a chronological index. Full architectural decisions belong in ADRs.
 | 2026-09-07 | D-004 | Do not optimize mechanisms intended to evade Telegram anti-abuse controls; first determine a sustainable operating model | ACCEPTED CONSTRAINT | Telegram research |
 | 2026-09-07 | D-005 | Final production integration must not rely on Telegram's published/sample Android API credentials | PROPOSED — high-confidence platform constraint | Telegram research |
 | 2026-09-07 | D-006 | Safety/quota authorization should fail closed when required durable state is unavailable | PROPOSED — architecture requirement | Baseline audit / requirements |
+| 2026-09-08 | D-007 | Use the developer PC as the default environment for discovery/PoCs; introduce a staging VPS only for tests that materially require production-like Linux/network/runtime behaviour | ACCEPTED | `TESTING-STRATEGY.md` |
 
 ## Rules
 

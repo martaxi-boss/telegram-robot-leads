@@ -39,11 +39,20 @@ Official Telegram sources reviewed:
 - API Terms of Service;
 - Bot API documentation;
 - user authorization documentation;
-- Telegram Terms of Service.
+- Telegram Terms of Service;
+- invite-link/join-request capabilities;
+- user-only direct member-add semantics.
 
 Official EU source reviewed:
 
 - GDPR principles and lawfulness of processing (EUR-Lex).
+
+SQLite/PostgreSQL primary documentation reviewed for:
+
+- SQLite transaction/WAL concurrency;
+- PostgreSQL row locking and `SKIP LOCKED` queue patterns.
+
+Docker/systemd operational documentation reviewed for runtime comparison inputs.
 
 ### Engineering process established
 
@@ -51,9 +60,14 @@ Official EU source reviewed:
 - Established GitHub as authoritative engineering memory.
 - Added phased roadmap.
 - Added requirements register.
-- Added baseline audit.
-- Added initial Telegram platform research.
+- Added baseline audit and detailed legacy behaviour model.
+- Added initial Telegram platform research and Telegram capability/permission matrix.
 - Added initial data/privacy research.
+- Added datastore/queue/concurrency research.
+- Added runtime/infrastructure comparison research.
+- Added security threat model.
+- Added observability/health model.
+- Added safe runtime inventory template.
 - Added ADR template.
 - Accepted ADR-001: research-first architecture discovery before final implementation.
 - Started decision log and work log.
@@ -70,13 +84,31 @@ Official EU source reviewed:
 - #8 Observability, health model and operational runbooks.
 - #9 Architecture alternatives, scoring matrix and critical PoCs.
 - #10 Critical remediation: remove historical `users.db` from Git safely.
+- Draft PR #11 created for the architecture-discovery documentation set.
+
+### Research conclusions so far
+
+- Opt-in invite-link + join-request workflows are officially supported and must be represented in architecture alternatives.
+- Direct `channels.inviteToChannel` member addition is a distinct user-account-only capability and must not be treated as the default membership architecture.
+- Telethon `.session` files contain authorization credentials and cached entity data and must be treated as critical secrets.
+- Exact generic Telegram rate limits are not a stable architecture constant; explicit Telegram restriction/wait signals must be respected as platform state.
+- SQLite remains viable for intentionally small single-host designs; PostgreSQL is stronger when multi-host/multi-worker/multi-project requirements are proven.
+- A separate Redis/RabbitMQ-style queue is not justified by current evidence.
+- The hardest reliability issue is the non-atomic boundary between remote Telegram actions and local persistence; PoCs must test ambiguous outcomes and reconciliation.
+- Monitoring must distinguish process liveness from account, project-capability, dependency and end-to-end health.
+
+### Runtime inventory status
+
+- A safe inventory template was added to GitHub.
+- Local workstation has SSH key material/known hosts, but no SSH config/alias that unambiguously identifies the Telegram VPS.
+- An automated read-only remote identification attempt was blocked by the execution safety layer; no credential bypass was attempted.
+- Live VPS inventory therefore remains pending host identification through an approved access path.
 
 ### Next work
 
-- Complete Telegram capability/permission matrix.
-- Inventory actual runtime/VPS state without committing secrets.
-- Define measurable product requirements with the project owner.
-- Research datastore/state-machine alternatives.
-- Build threat model.
-- Compare runtime/infrastructure alternatives.
-- Define PoCs required before Architecture v1.0.
+- Resolve product scope and measurable requirements (#2).
+- Complete Telegram capability/policy research (#3).
+- Identify and inventory live runtime/VPS without exposing secrets (#6/#7/#8).
+- Formalize reliability state machine and reconciliation design (#5).
+- Build architecture alternatives and PoC specifications (#9).
+- Prepare safe history-sanitization recovery plan before touching `users.db` history (#10).

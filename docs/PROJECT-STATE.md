@@ -20,6 +20,8 @@ The current `main.py` is a legacy operational baseline and evidence source. It i
 
 Documentation & Knowledge Governance v1 is **adopted** via `ADR-001`.
 
+The audit-derived roadmap discovery program is **adopted** via `ADR-002`.
+
 The repository is the persistent project knowledge source; chat is a working/reasoning surface.
 
 ## Roadmap audit status
@@ -32,8 +34,9 @@ Deep roadmap audit completed at repository/evidence level on 2026-09-11 and reco
 - `requirements/roadmap-readiness-requirements.md`
 - `roadmap/roadmap-v0.9-audit-derived.md`
 - `risks/risk-register.md`
+- `decisions/ADR-002-roadmap-discovery-program.md`
 
-`roadmap-v0.9-audit-derived.md` is a **draft gate-based program, not a calendar commitment and not yet the final roadmap**.
+`roadmap-v0.9-audit-derived.md` is now the **accepted discovery/program structure**, but it is still **not a calendar commitment and not yet the final implementation roadmap**. Acceptance covers its gates, ordering logic and evidence discipline; technical hypotheses and proposed requirements remain subject to their own decision gates.
 
 ## Key confirmed findings
 
@@ -113,6 +116,10 @@ Do **not** accept Architecture Baseline v1.0 until product scope, measurable qua
 ## Schedule rule
 
 Do not attach implementation dates to the final roadmap before Architecture Baseline v1.0. Track current progress by gates/evidence maturity; derive effort/calendar after the baseline is accepted.
+
+## Approval record
+
+On 2026-09-11, the project owner explicitly approved recording the full deep-audit output and adopting the audit-derived roadmap discovery program. This approval is captured in `ADR-002` and does not pre-approve unresolved technical choices.
 
 ## Resume point
 

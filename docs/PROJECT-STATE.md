@@ -1,6 +1,6 @@
 # Current Project State
 
-Updated: 2026-09-11
+Updated: 2026-09-12
 
 ## Phase
 
@@ -21,6 +21,8 @@ The current `main.py` is a legacy operational baseline and evidence source. It i
 Documentation & Knowledge Governance v1 is **adopted** via `ADR-001`.
 
 The audit-derived roadmap discovery program is **adopted** via `ADR-002`.
+
+Agent supervision and delegation governance is **adopted** via `ADR-003`. Root `AGENTS.md` is the canonical repository agent entrypoint and `.ai/EXECUTOR_AGENT_PROMPT_TEMPLATE.md` is the canonical Supervisor-to-Executor delegation template. Delegation cannot expand explicit human authorization.
 
 The repository is the persistent project knowledge source; chat is a working/reasoning surface.
 
@@ -120,6 +122,8 @@ Do not attach implementation dates to the final roadmap before Architecture Base
 ## Approval record
 
 On 2026-09-11, the project owner explicitly approved recording the full deep-audit output and adopting the audit-derived roadmap discovery program. This approval is captured in `ADR-002` and does not pre-approve unresolved technical choices.
+
+On 2026-09-12, the project owner explicitly authorized persistence of the Supervisor/Auditor posture, non-expanding delegation rule and canonical executor prompt as a Git-side agent-governance convention. This approval is captured in `ADR-003` and does not authorize any application, release, runtime, infrastructure or subsequent implementation phase.
 
 ## Resume point
 

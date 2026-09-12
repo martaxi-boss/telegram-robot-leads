@@ -16,3 +16,4 @@ Use `../templates/adr.md`.
 ## Index
 
 - `ADR-001` — Documentation & Knowledge Governance v1 — **Accepted** — 2026-09-08
+- `ADR-003` — Agent supervision and delegation governance — **Accepted** — 2026-09-12

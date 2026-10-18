@@ -8,7 +8,7 @@ vault="${TELEGRAM_ROBOT_LEADS_VAULT:-/root/project-secrets/telegram-robot-leads}
 metrics_root="${TELEGRAM_ROBOT_LEADS_METRICS_ROOT:-/opt/telegram-leads-optin}"
 
 printf '=== Telegram Robot Leads: protected vault (metadata only) ===\n'
-"$python_bin" "$script_dir/lead_health.py" --root "$vault" --no-pm2
+"$python_bin" "$script_dir/lead_health.py" --root "$vault"
 printf '=== Telegram Robot Leads: opt-in metrics (read-only) ===\n'
 "$python_bin" "$script_dir/growth_tracker.py" --root "$metrics_root" --stats
-printf '=== PM2 intentionally not queried; status is not Telegram connectivity proof ===\n'
+printf '=== PM2 state is read-only and does not prove Telegram connectivity ===\n'

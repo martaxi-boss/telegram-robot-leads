@@ -98,6 +98,17 @@ class HealthTests(unittest.TestCase):
             self.assertEqual(report['metrics_runtime']['status'], 'not_found')
             self.assertIn('not queried', report['runtime']['diagnostic'])
 
+    def test_status_alias_never_opens_legacy_database_or_account_logs(self):
+        scripts = Path(__file__).resolve().parents[1] / 'scripts'
+        legacy = (scripts / 'telegram-iptvpn-status.sh').read_text(encoding='utf-8')
+        current = (scripts / 'telegram-robot-leads-status.sh').read_text(encoding='utf-8')
+        self.assertIn('telegram-robot-leads-status.sh', legacy)
+        self.assertNotIn('sqlite3.connect', legacy)
+        self.assertNotIn('tail -', legacy)
+        self.assertIn('--no-pm2', current)
+        self.assertIn('/root/project-secrets/telegram-robot-leads', current)
+        self.assertIn('--stats', current)
+
     def test_invalid_config_redacted(self):
         self.assertEqual(lead_health._safe_value("MAX_ADDS_PROJECT_PER_DAY", "password123"), "INVALID")
         self.assertEqual(lead_health._safe_value("TARGET_GROUP", "SECRET&value"), "INVALID")

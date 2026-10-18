@@ -225,8 +225,10 @@ def inspect(root: Path, pm2_records: list[dict[str, Any]], pm2_error: str | None
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--no-pm2", action="store_true",
+                        help="Skip PM2 commands for a guaranteed process-neutral vault inventory")
     args = parser.parse_args()
-    pm2, error = read_pm2()
+    pm2, error = ([], "PM2 deliberately not queried") if args.no_pm2 else read_pm2()
     print(json.dumps(inspect(args.root, pm2, error), ensure_ascii=False, indent=2))
     return 0
 

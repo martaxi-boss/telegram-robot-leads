@@ -129,7 +129,7 @@ class TrackerTests(unittest.TestCase):
         methods = []
         def api(method, params):
             methods.append(method)
-            return {'id': 55} if method == 'getMe' else {'status': 'administrator', 'can_invite_users': True} if method == 'getChatMember' else {'url': ''} if method == 'getWebhookInfo' else {'id': int(CHAT)}
+            return {'id': 55} if method == 'getMe' else {'status': 'administrator', 'can_invite_users': True} if method == 'getChatMember' else {'url': ''} if method == 'getWebhookInfo' else {'id': int(CHAT), 'type': 'supergroup'}
         self.assertEqual(t.verify_polling(api, '@iptvpncode'), CHAT)
         self.assertEqual(methods, ['getMe', 'getChatMember', 'getWebhookInfo', 'getChat'])
         def with_webhook(method, params):

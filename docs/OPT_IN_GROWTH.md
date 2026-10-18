@@ -106,7 +106,20 @@ TELEGRAM_GROWTH_BOT_DEDICATED=1
 
 `TELEGRAM_GROWTH_BOT_DEDICATED=1` is an assertion of exclusive ownership;
 do **not** set it unless the token is genuinely dedicated. The code cannot
-discover pollers running on other servers. The bot requires admin privileges
+discover pollers running on other servers. **Every online operation, including
+`--check`, now fails closed** without that confirmation. A token also fails
+preflight if identical to `TELEGRAM_BOT_TOKEN`, `BOT_TOKEN`, or
+`IPTVPN_BOT_TOKEN` in the local configuration. This is a collision check,
+not proof of exclusivity.
+
+`--check` validates Bot API access, administrator rights, absence of a webhook,
+the **group/supergroup** destination type and safe local storage file modes.
+It does not create files or consume Telegram updates. The status
+`admin_and_local_storage_verified` does **not** prove event delivery or
+exclusive ownership of the bot. If blocked, investigate the cause rather
+than bypassing the check.
+
+The bot requires admin privileges
 for the intended group and the `Invite users` right.
 
 Run in this order on a controlled, backed-up host:

@@ -130,9 +130,9 @@ class ProductionGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as vd:
             env_path = Path(vd) / '.env'
             env_path.write_text(
-                'TELEGRAM_GROWTH_BOT_TOKEN=' + BOT_TOKEN + '\\n'
-                + 'TELEGRAM_GROWTH_BOT_DEDICATED=1\\n'
-                + 'TARGET_GROUP=' + CHAT + '\\n', encoding='utf-8')
+                'TELEGRAM_GROWTH_BOT_TOKEN=' + BOT_TOKEN + '\n'
+                + 'TELEGRAM_GROWTH_BOT_DEDICATED=1\n'
+                + 'TARGET_GROUP=' + CHAT + '\n', encoding='utf-8')
             env_path.chmod(0o600)
             code, out, err, calls = self.run_cli(
                 td, ['--check', '--env-file', str(env_path)], {})
@@ -145,7 +145,7 @@ class ProductionGateTests(unittest.TestCase):
     def test_explicit_world_readable_vault_is_rejected_before_telegram_call(self):
         with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as vd:
             env_path = Path(vd) / '.env'
-            env_path.write_text('TELEGRAM_GROWTH_BOT_TOKEN=' + BOT_TOKEN + '\\n')
+            env_path.write_text('TELEGRAM_GROWTH_BOT_TOKEN=' + BOT_TOKEN + '\n')
             env_path.chmod(0o644)
             code, out, err, calls = self.run_cli(
                 td, ['--check', '--env-file', str(env_path)], {})
@@ -171,9 +171,9 @@ class ProductionGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as vd:
             env_path = Path(vd) / '.env'
             env_path.write_text(
-                'TELEGRAM_GROWTH_BOT_TOKEN=' + BOT_TOKEN + '\\n'
-                + 'TELEGRAM_GROWTH_BOT_DEDICATED=1\\n'
-                + 'TELEGRAM_BOT_TOKEN=' + BOT_TOKEN + '\\n', encoding='utf-8')
+                'TELEGRAM_GROWTH_BOT_TOKEN=' + BOT_TOKEN + '\n'
+                + 'TELEGRAM_GROWTH_BOT_DEDICATED=1\n'
+                + 'TELEGRAM_BOT_TOKEN=' + BOT_TOKEN + '\n', encoding='utf-8')
             env_path.chmod(0o600)
             code, out, err, calls = self.run_cli(
                 td, ['--check', '--env-file', str(env_path)], {})

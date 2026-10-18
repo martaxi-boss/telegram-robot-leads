@@ -1,25 +1,29 @@
 /**
- * PM2 — Não apagues "const cwd"; troca só o caminho se a pasta no VPS for outra.
- * Credenciais Telegram: .env (preferido) ou telegram_api.json — vê telegram_api.json.example.
- * Se my.telegram.org não der: TELEGRAM_USE_PUBLISHED_ANDROID_API=1 (= par público app Android OSS).
- * Se no PM2 ainda passares TELEGRAM_API_* placeholders, põe DOTENV_OVERRIDE: "1" em env.
+ * Telegram Robot Leads — canonical safe PM2 runtime.
+ *
+ * No legacy discovery/scraping/human-mimic configuration is accepted here.
+ * The worker reads only the protected project vault plus explicit operator
+ * allowlists and approved/consented usernames.
  */
-const cwd = "/root/TELEGRAM-IPTVPN";
+const cwd = "/opt/telegram-robot-leads";
 
 module.exports = {
   apps: [
     {
-      name: "TELEGRAM-IPTVPN",
+      name: "telegram-robot-leads",
       cwd,
       script: "main.py",
-      interpreter: ".venv/bin/python",
+      interpreter: "/opt/telegram-robot-leads/.venv/bin/python",
+      args: "--loop --interval 60 --vault /root/project-secrets/telegram-robot-leads",
+      autorestart: true,
+      restart_delay: 5000,
+      max_restarts: 10,
       env: {
-        DOTENV_OVERRIDE: "1",
-        TARGET_GROUP: "@iptvpncode",
-        MAX_ADDS_PROJECT_PER_DAY: "100",
-        TELEGRAM_SCRAPE_RELAX_NAME_FILTER: "1",
-        TELEGRAM_PRIORITY_SCRAPE_GROUPS:
-          "IPTVCLASES,iptvcccampt,stremioEs,iptvgermanyvip,iptvromaniatv,iptvpolskie,iptvgermanquality",
+        TELEGRAM_OPERATION_STATE:
+          "/var/lib/telegram-robot-leads/operation-state.json",
+        TELEGRAM_TZ: "Europe/Lisbon",
+        TELEGRAM_GROUP_ALLOWLIST: "group_allowlist.txt",
+        TELEGRAM_APPROVED_USERS: "approved_users.txt",
       },
     },
   ],

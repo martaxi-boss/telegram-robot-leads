@@ -8,8 +8,7 @@ on:
       - "requirements.txt"
       - "ecosystem.config.js"
       - "tests/**"
-      - "docs/OPT_IN_GROWTH.md"
-      - "ecosystem.growth.example.config.js"
+      - "docs/**"
       - ".github/workflows/safe-growth-checks.yml"
   push:
     branches:
@@ -20,8 +19,7 @@ on:
       - "requirements.txt"
       - "ecosystem.config.js"
       - "tests/**"
-      - "docs/OPT_IN_GROWTH.md"
-      - "ecosystem.growth.example.config.js"
+      - "docs/**"
       - ".github/workflows/safe-growth-checks.yml"
 
 permissions:
@@ -35,11 +33,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Syntax validation (including legacy main)
-        run: python -m py_compile main.py scripts/lead_health.py scripts/optin_join_links.py scripts/growth_store.py scripts/growth_tracker.py scripts/telethon_sessions.py
-      - name: Local tests (no external credentials)
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Syntax validation
+        run: >-
+          python -m py_compile
+          main.py
+          scripts/lead_health.py
+          scripts/optin_join_links.py
+          scripts/growth_store.py
+          scripts/growth_tracker.py
+          scripts/telethon_sessions.py
+          scripts/operation_policy.py
+          scripts/safe_runtime.py
+      - name: Local tests
         run: python -m unittest discover -s tests -v
-      - name: Canonical and legacy status shells parse safely
+      - name: Status shells parse safely
         run: bash -n scripts/telegram-robot-leads-status.sh scripts/telegram-iptvpn-status.sh
-      - name: PM2 config syntax (inert example, no deployment)
-        run: node --check ecosystem.growth.example.config.js
+      - name: Canonical PM2 config syntax
+        run: node --check ecosystem.config.js

@@ -1,4 +1,23 @@
-# Telegram Leads: read-only health and opt-in growth tools
+# Telegram Robot Leads: read-only health and opt-in growth tools
+
+## Project identity (Owner-confirmed 2026-10-18)
+
+**Telegram Robot Leads** is the current official name of the existing project
+`martaxi-boss/telegram-robot-leads`. **TELEGRAM-IPTVPN was its former
+operational label, not a different project or a VPN service.** Do not create a
+second instance or a second set of Telegram accounts when seeing that old name.
+
+The separate `martaxi-boss/iptvpn-bot` project remains a different application,
+with independent credentials and processes.
+
+The live VPS audit on 2026-10-18 found the same project's existing protected
+credentials at `/root/project-secrets/TELEGRAM-IPTVPN/.env`, including two
+session files in that directory. The **intended canonical** vault directory name
+is `/root/project-secrets/telegram-robot-leads/`, but a filesystem rename was
+**not completed by the authorized automation** and must not be assumed. Keep
+reading the actual existing path until the migration is independently verified.
+Do not copy or log secrets to solve a naming mismatch.
+
 
 These tools preserve the existing Telethon/SQLite baseline and **do not deploy, restart,
 modify, or enable the legacy direct-add worker**. They provide a safe way to diagnose

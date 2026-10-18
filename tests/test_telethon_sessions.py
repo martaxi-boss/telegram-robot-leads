@@ -78,6 +78,20 @@ class MemoryOnlySessionTests(unittest.TestCase):
         self.assertEqual(existing, after)
         self.assertFalse(any(x.suffix in {".wal", ".shm"} for x in self.root.iterdir()))
 
+    def test_large_realistic_sqlite_session_remains_usable_read_only(self):
+        path = self.root / "conta1.session"
+        db = sqlite3.connect(path)
+        db.execute("CREATE TABLE entity_cache (payload BLOB)")
+        db.execute("INSERT INTO entity_cache (payload) VALUES (?)", (b"x" * 350000,))
+        db.commit()
+        db.close()
+        os.chmod(path, 0o600)
+        before = (path.stat().st_size, path.stat().st_mtime_ns)
+        self.assertGreater(before[0], 131072)
+        result = probe.inspect(self.root)
+        self.assertEqual(len(result["entries"][0]["session"][3]), 256)
+        self.assertEqual((path.stat().st_size, path.stat().st_mtime_ns), before)
+
     def test_public_android_api_is_detected_not_allowed_for_production_links(self):
         self.write_private(".env", "TELEGRAM_USE_PUBLISHED_ANDROID_API=1\n"
                            "TARGET_GROUP=@iptvpncode\n")

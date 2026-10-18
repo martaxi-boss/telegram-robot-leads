@@ -118,11 +118,14 @@ def main() -> int:
     group.add_argument("--check", action="store_true", help="Read-only credential and admin permission check (default)")
     group.add_argument("--create-link", metavar="CAMPAIGN", help="Create a named join-request link; users must choose to apply")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--env-file", type=Path, default=None,
+                        help="Optional absolute root-only .env path in a separate credentials vault")
     args = parser.parse_args()
-    configured = read_env_names_and_values(args.root / ".env")
-    token = os.environ.get("TELEGRAM_GROWTH_BOT_TOKEN") or configured.get("TELEGRAM_GROWTH_BOT_TOKEN", "")
-    chat = os.environ.get("TARGET_GROUP") or configured.get("TARGET_GROUP", "@iptvpncode")
     try:
+        env_path = args.env_file if args.env_file is not None else args.root / ".env"
+        configured = read_env_names_and_values(env_path, owner_only=args.env_file is not None)
+        token = os.environ.get("TELEGRAM_GROWTH_BOT_TOKEN") or configured.get("TELEGRAM_GROWTH_BOT_TOKEN", "")
+        chat = os.environ.get("TARGET_GROUP") or configured.get("TARGET_GROUP", "@iptvpncode")
         if not token:
             raise BotAccessError("TELEGRAM_GROWTH_BOT_TOKEN is not configured")
         validate_dedicated_bot(token, configured)

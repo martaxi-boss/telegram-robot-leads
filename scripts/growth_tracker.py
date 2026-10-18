@@ -7,6 +7,7 @@ Use a DEDICATED BotFather bot, never a token used by another update consumer.
 """
 
 import argparse
+from contextlib import closing
 import fcntl
 import json
 import os
@@ -100,18 +101,27 @@ def main() -> int:
     choices.add_argument('--run', action='store_true', help='Continuously record membership transitions')
     choices.add_argument('--stats', action='store_true', help='Show local retained events (offline)')
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument('--env-file', type=Path, default=None,
+                        help='Optional absolute root-only .env path in the protected credentials vault')
     args = parser.parse_args()
     root = args.root.resolve()
     path = default_db_path(root)
     try:
         if args.stats:
-            if not path.is_file():
+            # Genuine read-only status: never initialize or migrate an existing DB.
+            if path.is_symlink():
+                raise BotAccessError('Unsafe metrics database symlink')
+            if not path.exists():
                 print(json.dumps({'status': 'no_data', 'metrics': {}}))
                 return 0
-            with store_connection(path) as db:
+            if not path.is_file() or stat.S_IMODE(path.stat().st_mode) & 0o077:
+                raise BotAccessError('Metrics database permissions must be owner-only')
+            uri = path.as_uri() + '?mode=ro'
+            with closing(sqlite3.connect(uri, uri=True, timeout=10)) as db:
                 print(json.dumps({'status': 'ok', **statistics(db)}, ensure_ascii=False))
             return 0
-        configured = read_env_names_and_values(root / '.env')
+        env_path = args.env_file if args.env_file is not None else root / '.env'
+        configured = read_env_names_and_values(env_path, owner_only=args.env_file is not None)
         token = os.environ.get('TELEGRAM_GROWTH_BOT_TOKEN') or configured.get('TELEGRAM_GROWTH_BOT_TOKEN', '')
         group = os.environ.get('TARGET_GROUP') or configured.get('TARGET_GROUP', '@iptvpncode')
         if not token:

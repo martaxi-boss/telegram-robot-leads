@@ -126,12 +126,101 @@ class ProductionGateTests(unittest.TestCase):
             self.assertFalse((Path(td) / 'growth_metrics.sqlite3').exists())
             self.assertFalse((Path(td) / 'growth_metrics.lock').exists())
 
+    def test_explicit_protected_vault_env_can_be_used_without_copying_token(self):
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as vd:
+            env_path = Path(vd) / '.env'
+            env_path.write_text(
+                'TELEGRAM_GROWTH_BOT_TOKEN=' + BOT_TOKEN + '\n'
+                + 'TELEGRAM_GROWTH_BOT_DEDICATED=1\n'
+                + 'TARGET_GROUP=' + CHAT + '\n', encoding='utf-8')
+            env_path.chmod(0o600)
+            code, out, err, calls = self.run_cli(
+                td, ['--check', '--env-file', str(env_path)], {})
+            self.assertEqual(code, 0, err)
+            self.assertEqual(calls, 4)
+            self.assertEqual(json.loads(out)['chat_id'], CHAT)
+            self.assertNotIn(BOT_TOKEN, out + err)
+            self.assertFalse((Path(td) / 'growth_metrics.sqlite3').exists())
+
+    def test_explicit_world_readable_vault_is_rejected_before_telegram_call(self):
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as vd:
+            env_path = Path(vd) / '.env'
+            env_path.write_text('TELEGRAM_GROWTH_BOT_TOKEN=' + BOT_TOKEN + '\n')
+            env_path.chmod(0o644)
+            code, out, err, calls = self.run_cli(
+                td, ['--check', '--env-file', str(env_path)], {})
+            self.assertEqual(code, 2)
+            self.assertEqual(calls, 0)
+            self.assertIn('configuration failed', err)
+            self.assertNotIn(BOT_TOKEN, err)
+
+    def test_explicit_symlink_vault_file_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as vd:
+            original = Path(vd) / '.private'
+            original.write_text('TELEGRAM_GROWTH_BOT_TOKEN=' + BOT_TOKEN)
+            original.chmod(0o600)
+            link = Path(vd) / '.env'
+            link.symlink_to(original)
+            code, out, err, calls = self.run_cli(
+                td, ['--check', '--env-file', str(link)], {})
+            self.assertEqual(code, 2)
+            self.assertEqual(calls, 0)
+            self.assertNotIn(BOT_TOKEN, err)
+
+    def test_external_vault_cannot_authorize_reusing_existing_bot(self):
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as vd:
+            env_path = Path(vd) / '.env'
+            env_path.write_text(
+                'TELEGRAM_GROWTH_BOT_TOKEN=' + BOT_TOKEN + '\n'
+                + 'TELEGRAM_GROWTH_BOT_DEDICATED=1\n'
+                + 'TELEGRAM_BOT_TOKEN=' + BOT_TOKEN + '\n', encoding='utf-8')
+            env_path.chmod(0o600)
+            code, out, err, calls = self.run_cli(
+                td, ['--check', '--env-file', str(env_path)], {})
+            self.assertEqual(code, 2)
+            self.assertEqual(calls, 0)
+            self.assertIn('another Telegram bot', err)
+            self.assertNotIn(BOT_TOKEN, err)
+
     def test_stats_offline_never_needs_bot_credentials(self):
         with tempfile.TemporaryDirectory() as td:
             code, out, err, calls = self.run_cli(td, ['--stats'], {})
             self.assertEqual(code, 0, err)
             self.assertEqual(calls, 0)
             self.assertEqual(json.loads(out)['status'], 'no_data')
+
+    def test_offline_stats_existing_db_are_read_only(self):
+        from growth_store import open_store
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'growth_metrics.sqlite3'
+            db = open_store(path)
+            db.close()
+            mtime = path.stat().st_mtime_ns
+            code, output, error, calls = self.run_cli(td, ['--stats'], {})
+            self.assertEqual(code, 0, error)
+            self.assertEqual(calls, 0)
+            self.assertEqual(json.loads(output)['status'], 'ok')
+            self.assertEqual(path.stat().st_mtime_ns, mtime)
+            self.assertFalse((Path(td) / 'growth_metrics.lock').exists())
+
+    def test_offline_stats_rejects_external_symlink_or_public_database(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'growth_metrics.sqlite3'
+            outside = Path(td) / 'elsewhere.sqlite3'
+            outside.touch()
+            path.symlink_to(outside)
+            code, _, error, calls = self.run_cli(td, ['--stats'], {})
+            self.assertEqual(code, 2)
+            self.assertEqual(calls, 0)
+            self.assertIn('symlink', error)
+            path.unlink()
+            path.write_bytes(b'fake')
+            path.chmod(0o644)
+            code, _, error, calls = self.run_cli(td, ['--stats'], {})
+            self.assertEqual(code, 2)
+            self.assertEqual(calls, 0)
+            self.assertIn('owner-only', error)
+
 
 
 if __name__ == '__main__':

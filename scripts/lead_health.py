@@ -15,7 +15,8 @@ import stat
 import subprocess
 from typing import Any
 
-PROCESS_NAME = "TELEGRAM-IPTVPN"
+PROCESS_NAME = "TELEGRAM-IPTVPN"  # Historical, inactive legacy process name.
+METRICS_PROCESS_NAME = "TELEGRAM-LEADS-METRICS"
 SAFE_DEFAULTS = {
     "TARGET_GROUP": "@iptvpncode",
     "MAX_ADDS_PROJECT_PER_DAY": "70",
@@ -30,12 +31,48 @@ BOOL_KEYS = {"TELEGRAM_INVITES_ENABLED", "SCRAPE_ENABLED", "TELEGRAM_ACTIVE_MODE
 CREDENTIAL_KEYS = ("TELEGRAM_API_ID", "TELEGRAM_API_HASH", "API_ID", "API_HASH", "TELEGRAM_GROWTH_BOT_TOKEN")
 
 
-def read_env_names_and_values(path: Path) -> dict[str, str]:
-    """Read env file for analysis; caller must print allowlisted fields only."""
-    if not path.is_file():
-        return {}
+def read_env_names_and_values(path: Path, *, owner_only: bool = False) -> dict[str, str]:
+    """Parse an env file without exposing its contents.
+
+    Explicit external credentials use owner_only=True: the full path must be
+    canonical and non-symlinked, and its directory/file belong only to the
+    effective process owner. O_NOFOLLOW and fstat guard the opened file.
+    """
+    path = Path(path)
+    if owner_only:
+        if not path.is_absolute() or ".." in path.parts:
+            raise PermissionError("Explicit credentials path must be absolute")
+        try:
+            if path.resolve(strict=True) != path:
+                raise PermissionError("Credentials path must not contain symlinks")
+            parent = path.parent.lstat()
+            if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid()
+                    or stat.S_IMODE(parent.st_mode) & 0o077):
+                raise PermissionError("Credentials directory must be owner-only")
+            if not hasattr(os, "O_NOFOLLOW"):
+                raise PermissionError("Symlink-safe file opening unavailable")
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                opened = os.fstat(fd)
+                if (not stat.S_ISREG(opened.st_mode) or opened.st_uid != os.geteuid()
+                        or stat.S_IMODE(opened.st_mode) & 0o077):
+                    raise PermissionError("Credentials file must be owner-only")
+                with os.fdopen(fd, "r", encoding="utf-8") as file:
+                    fd = -1
+                    raw = file.read(131073)
+                if len(raw) > 131072:
+                    raise ValueError("Credentials file exceeds safe limit")
+            finally:
+                if fd >= 0:
+                    os.close(fd)
+        except OSError as error:
+            raise PermissionError("Credentials are missing or not owner-only") from error
+    else:
+        if not path.is_file():
+            return {}
+        raw = path.read_text(encoding="utf-8")
     fields: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in raw.splitlines():
         match = re.match(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*)\s*$", line)
         if not match:
             continue
@@ -133,6 +170,14 @@ def inspect(root: Path, pm2_records: list[dict[str, Any]], pm2_error: str | None
     }
     if pm2_error:
         runtime["diagnostic"] = pm2_error
+    metrics_proc = next((p for p in pm2_records if p.get("name") == METRICS_PROCESS_NAME), None)
+    metrics_pm2 = metrics_proc.get("pm2_env", {}) if isinstance(metrics_proc, dict) else {}
+    metrics_runtime = {
+        "found": bool(metrics_proc),
+        "name": METRICS_PROCESS_NAME,
+        "status": str(metrics_pm2.get("status", "unknown")) if metrics_proc else "not_found",
+        "note": "PM2 state does not verify Telegram join events",
+    }
     config = {}
     for key, default in SAFE_DEFAULTS.items():
         if key in private_env and (override or key not in pm2_env):
@@ -163,6 +208,7 @@ def inspect(root: Path, pm2_records: list[dict[str, Any]], pm2_error: str | None
         "project": "telegram-robot-leads",
         "source": "read-only local snapshot",
         "runtime": runtime,
+        "metrics_runtime": metrics_runtime,
         "configuration_candidates": config,
         "credentials": {
             "telegram_api_id_configured": present_keys["TELEGRAM_API_ID"] or present_keys["API_ID"] or sensitive["telegram_api.json"]["present"],
@@ -179,8 +225,10 @@ def inspect(root: Path, pm2_records: list[dict[str, Any]], pm2_error: str | None
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--no-pm2", action="store_true",
+                        help="Skip PM2 commands for a guaranteed process-neutral vault inventory")
     args = parser.parse_args()
-    pm2, error = read_pm2()
+    pm2, error = ([], "PM2 deliberately not queried") if args.no_pm2 else read_pm2()
     print(json.dumps(inspect(args.root, pm2, error), ensure_ascii=False, indent=2))
     return 0
 

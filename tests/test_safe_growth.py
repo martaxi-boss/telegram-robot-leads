@@ -34,7 +34,7 @@ class HealthTests(unittest.TestCase):
     def test_canonical_pm2_status_and_vault_group_source(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            (root / ".env").write_text("TARGET_GROUP=@vaultgroup\\n")
+            (root / ".env").write_text("TARGET_GROUP=@vaultgroup" + chr(10))
             proc = {"name": "telegram-robot-leads", "pid": 123,
                     "pm2_env": {"status": "online", "TARGET_GROUP": "@othergroup"}}
             actual = lead_health.inspect(root, [proc])

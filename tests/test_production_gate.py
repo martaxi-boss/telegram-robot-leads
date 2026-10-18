@@ -189,6 +189,39 @@ class ProductionGateTests(unittest.TestCase):
             self.assertEqual(calls, 0)
             self.assertEqual(json.loads(out)['status'], 'no_data')
 
+    def test_offline_stats_existing_db_are_read_only(self):
+        from growth_store import open_store
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'growth_metrics.sqlite3'
+            db = open_store(path)
+            db.close()
+            mtime = path.stat().st_mtime_ns
+            code, output, error, calls = self.run_cli(td, ['--stats'], {})
+            self.assertEqual(code, 0, error)
+            self.assertEqual(calls, 0)
+            self.assertEqual(json.loads(output)['status'], 'ok')
+            self.assertEqual(path.stat().st_mtime_ns, mtime)
+            self.assertFalse((Path(td) / 'growth_metrics.lock').exists())
+
+    def test_offline_stats_rejects_external_symlink_or_public_database(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'growth_metrics.sqlite3'
+            outside = Path(td) / 'elsewhere.sqlite3'
+            outside.touch()
+            path.symlink_to(outside)
+            code, _, error, calls = self.run_cli(td, ['--stats'], {})
+            self.assertEqual(code, 2)
+            self.assertEqual(calls, 0)
+            self.assertIn('symlink', error)
+            path.unlink()
+            path.write_bytes(b'fake')
+            path.chmod(0o644)
+            code, _, error, calls = self.run_cli(td, ['--stats'], {})
+            self.assertEqual(code, 2)
+            self.assertEqual(calls, 0)
+            self.assertIn('owner-only', error)
+
+
 
 if __name__ == '__main__':
     unittest.main()

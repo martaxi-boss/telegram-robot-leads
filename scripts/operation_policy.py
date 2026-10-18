@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 import time
@@ -79,7 +80,7 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
             raise PolicyBlocked("state_account_invalid")
         for field in ("group_joins", "member_adds", "last_action"):
             value = account.get(field)
-            if type(value) not in (int, float) or value < 0:
+            if (type(value) is not int or value < 0) and not (field == "last_action" and type(value) is float and math.isfinite(value) and value >= 0):
                 raise PolicyBlocked("state_account_invalid")
         if type(account.get("blocked")) is not bool:
             raise PolicyBlocked("state_account_invalid")

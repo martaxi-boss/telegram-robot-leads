@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import json
+import asyncio
 import sys
 import tempfile
 import unittest
@@ -142,6 +143,20 @@ class SafeRuntimeInputTests(unittest.TestCase):
         second = safe_runtime.assigned_account("@examplegroup")
         self.assertEqual(first, second)
         self.assertIn(first, (1, 2))
+
+    def test_unresolved_outcome_is_never_auto_replayed(self):
+        async def check():
+            state = policy.empty_state()
+            state["pending_group_actions"]["@examplegroup"] = {"account": 1}
+            state["pending_member_actions"]["@exampleuser"] = {"account": 2}
+            with patch.object(safe_runtime, "_connected_client",
+                              side_effect=AssertionError("network must not run")):
+                with self.assertRaisesRegex(policy.PolicyBlocked, "outcome_unknown"):
+                    await safe_runtime._join_one({}, state, "@examplegroup", 1)
+                with self.assertRaisesRegex(policy.PolicyBlocked, "outcome_unknown"):
+                    await safe_runtime._add_one({"group": "@examplegroup"}, state,
+                                                "@exampleuser", 2)
+        asyncio.run(check())
 
 
 if __name__ == "__main__":

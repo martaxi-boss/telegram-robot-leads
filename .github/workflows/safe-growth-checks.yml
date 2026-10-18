@@ -33,5 +33,7 @@ jobs:
         run: python -m py_compile main.py scripts/lead_health.py scripts/optin_join_links.py scripts/growth_store.py scripts/growth_tracker.py
       - name: Local tests (no external credentials)
         run: python -m unittest discover -s tests -v
+      - name: Canonical and legacy status shells parse safely
+        run: bash -n scripts/telegram-robot-leads-status.sh scripts/telegram-iptvpn-status.sh
       - name: PM2 config syntax (inert example, no deployment)
         run: node --check ecosystem.growth.example.config.js

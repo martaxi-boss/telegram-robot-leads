@@ -8,6 +8,7 @@ contact scraping, auto-approvals, session impersonation, or anti-spam evasion.
 import argparse
 import json
 import os
+import sqlite3
 from pathlib import Path
 import sys
 from typing import Any, Callable
@@ -16,21 +17,22 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from lead_health import read_env_names_and_values
+from growth_store import default_db_path, register_campaign, store_connection
 
 
 class BotAccessError(RuntimeError):
     pass
 
 
-def request_telegram(token: str, method: str, params: dict[str, str]) -> dict[str, Any]:
+def request_telegram(token: str, method: str, params: dict[str, str], timeout_sec: int = 15) -> Any:
     if not token or not token.strip():
         raise BotAccessError("Growth bot token is missing")
-    if method not in {"getMe", "getChatMember", "createChatInviteLink"}:
+    if method not in {"getMe", "getChatMember", "getChat", "getWebhookInfo", "getUpdates", "createChatInviteLink"}:
         raise BotAccessError("Unrecognized Bot API operation")
     uri = f"https://api.telegram.org/bot{token}/{method}"
     req = Request(uri, data=urlencode(params).encode("utf-8"), method="POST")
     try:
-        with urlopen(req, timeout=15) as response:
+        with urlopen(req, timeout=timeout_sec) as response:
             data = json.loads(response.read(1024 * 1024).decode("utf-8"))
     except HTTPError as exc:
         # HTTPError's URL includes the token: NEVER stringify the exception.
@@ -41,7 +43,10 @@ def request_telegram(token: str, method: str, params: dict[str, str]) -> dict[st
         code = data.get("error_code", "unknown") if isinstance(data, dict) else "unknown"
         raise BotAccessError(f"Telegram API refused {method} (code {code})")
     result = data.get("result")
-    if not isinstance(result, dict):
+    if method == "getUpdates":
+        if not isinstance(result, list):
+            raise BotAccessError("Telegram API response has unexpected shape")
+    elif not isinstance(result, dict):
         raise BotAccessError("Telegram API response has unexpected shape")
     return result
 
@@ -93,14 +98,26 @@ def main() -> int:
         def call(method: str, payload: dict[str, str]) -> dict[str, Any]:
             return request_telegram(token, method, payload)
         if args.create_link is not None:
-            link = create_join_request_link(call, chat, args.create_link)
-            print(json.dumps({"status": "created", "join_request_link": link, "campaign": args.create_link}))
+            group_info = call("getChat", {"chat_id": chat})
+            group_id = group_info.get("id")
+            if not isinstance(group_id, int) or isinstance(group_id, bool):
+                raise BotAccessError("Telegram did not confirm the numeric group ID")
+            # Open database BEFORE calling Telegram; avoid creating a live link
+            # when its local registry is unusable.
+            with store_connection(default_db_path(args.root)) as db:
+                link = create_join_request_link(call, chat, args.create_link)
+                try:
+                    register_campaign(db, str(group_id), args.create_link, link)
+                except (sqlite3.Error, ValueError):
+                    raise BotAccessError("Telegram link may exist but local registration failed: inspect invite links before retrying") from None
+            print(json.dumps({"status": "created_and_registered", "join_request_link": link, "campaign": args.create_link}))
         else:
             check = check_access(call, chat)
             print(json.dumps({"status": "ready_for_opt_in_links", **check}))
         return 0
-    except BotAccessError as exc:
-        print(json.dumps({"status": "blocked", "reason": str(exc)}), file=sys.stderr)
+    except (BotAccessError, sqlite3.Error, OSError, PermissionError, ValueError) as exc:
+        reason = str(exc) if isinstance(exc, BotAccessError) else "Local metrics storage or configuration failed"
+        print(json.dumps({"status": "blocked", "reason": reason}), file=sys.stderr)
         return 2
 
 

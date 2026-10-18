@@ -28,7 +28,9 @@ class HealthTests(unittest.TestCase):
             self.assertNotIn("TOP_SECRET_HERE", data)
             self.assertNotIn("BOT_TOKEN_PRIVATE", data)
             self.assertTrue(result["credentials"]["telegram_api_hash_configured"])
-            self.assertEqual(result["configuration_candidates"]["MAX_ADDS_PROJECT_PER_DAY"]["value"], "17")
+            self.assertEqual(result["legacy_config_keys_present"], 1)
+            self.assertNotIn("MAX_ADDS_PROJECT_PER_DAY", result["configuration_candidates"])
+            self.assertNotIn("17", data)
             self.assertFalse(result["credentials"]["connectivity_verified"])
 
     def test_canonical_pm2_status_and_vault_group_source(self):

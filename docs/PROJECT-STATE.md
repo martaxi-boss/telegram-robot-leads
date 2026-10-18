@@ -1,10 +1,22 @@
 # Current Project State
 
-Updated: 2026-09-12
+Updated: 2026-10-18
 
 ## Phase
 
-**Discovery / Final-Roadmap Preparation**
+**Legacy recovery and safe diagnostics; discovery architecture still unapproved for production**
+
+## Current verified operational state (2026-10-18)
+
+- Official repo: `martaxi-boss/telegram-robot-leads`, previously labeled `TELEGRAM-IPTVPN` as an operational name. Do not confuse with an independent IPTV posting bot or the Project Leader Telegram Supervisor.
+- Canonical protected VPS vault `/root/project-secrets/telegram-robot-leads/` retains the two existing `.session` files and account configuration. The separate former Leads vault directory was removed by a verified rename, not by deleting/recreating credentials.
+- [Real two-account online verification](https://github.com/martaxi-boss/VPS/actions/runs/39166864689): both sessions authenticated, connected, identities confirmed, and phone numbers matched the vault account configuration. No members were added, no messages sent.
+- The direct SQLiteSession constructor failed with `ValueError` for these stored sessions under the probe Telethon version. A read-only four-column SQLite extraction into Telethon `MemorySession` succeeded for **both**, without mutating either original session.
+- [Last verified repository CI](https://github.com/martaxi-boss/telegram-robot-leads/actions/runs/39160879832) passed 49 offline tests; this does **not** certify the old 2,312-line direct-add `main.py`, which has only syntax checking in that CI.
+- The read-only VPS audit #39160115127 found **no active Telegram Robot Leads worker**. The original PM2 config still points at an old, nonexistent runtime path; do not run it unchanged.
+- New `scripts/telethon_sessions.py` adds independent offline/live session diagnosis and optional explicit voluntary group-link creation with the two existing Telethon identities. It does not run or repair the legacy direct-add engine and does not require a BotFather token.
+- Original `main.py` does direct additions by `InviteToChannelRequest`, not just share links. Its third-party group scraping, unsolicited additions, flood-retry logic and unproven data consent/retention remain excluded from production approval.
+- Exact source/CI, deploy proof for new scripts, the consent-based operating model and a controlled end-to-end test remain required before claiming a production-ready service.
 
 ## Objective
 
@@ -43,7 +55,7 @@ Deep roadmap audit completed at repository/evidence level on 2026-09-11 and reco
 ## Key confirmed findings
 
 - legacy implementation is concentrated in a large Telethon/SQLite `main.py` with project-specific behavior;
-- current repository has no automated CI workflow and `main` was unprotected when audited;
+- a minimal offline CI has since been added (49 tests on 2026-10-18), but legacy `main.py` runtime behavior and branch protection are not certified;
 - dependency resolution is not reproducibly locked;
 - runtime/configuration has competing values/precedence (including project daily cap drift);
 - DB-dependent safety/accounting paths can fail open by returning zero or suppressing failures;
@@ -52,7 +64,7 @@ Deep roadmap audit completed at repository/evidence level on 2026-09-11 and reco
 - Telegram session files are critical credentials;
 - published/sample Telegram API credential fallback is unsuitable as a production target;
 - historical `users.db` remains in Git history and requires recovery-first remediation;
-- live VPS/process/filesystem/backup posture is not yet verified;
+- live vault, session and backup evidence has now been partly verified; the original active service is still absent and disaster recovery remains unproven;
 - legacy user-account direct-add behavior must not be assumed to be the accepted future operating model;
 - current repo does not implement a full IPTV/VPN/payment/customer provisioning platform.
 

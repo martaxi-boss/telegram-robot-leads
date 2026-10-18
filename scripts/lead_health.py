@@ -5,6 +5,7 @@ Does not import main.py (which loads credentials), mutate DB state or connect to
 """
 
 import argparse
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -99,7 +100,7 @@ def _db_summary(path: Path) -> dict[str, Any]:
     try:
         # mode=ro will never create a missing database or write to an existing one.
         db_uri = path.resolve().as_uri().replace("file://", "file:") + "?mode=ro"
-        with sqlite3.connect(db_uri, uri=True, timeout=2) as db:
+        with closing(sqlite3.connect(db_uri, uri=True, timeout=2)) as db:
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             outcome["known_tables"] = sorted(tables.intersection({"users", "adder_events", "adder_daily"}))
             if "users" in tables:

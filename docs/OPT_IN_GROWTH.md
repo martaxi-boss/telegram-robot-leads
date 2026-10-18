@@ -177,3 +177,46 @@ subscribe to both `chat_member` and `chat_join_request` update types.
 Use the current group's native Telegram admin controls to review and approve
 the voluntary requests. This tool deliberately does not auto-approve or
 send messages to people who have not opted in.
+
+
+## 4. Recovery, bot isolation and optional PM2 supervisor
+
+The official Bot API `getUpdates` transport may temporarily fail. The
+continuous `--run` mode now retries **only read-only polling** after temporary
+network failures and HTTP 500/502/503/504 responses. Delays are bounded
+(2, 4, 8, 16, 32, 60 seconds); after six unsuccessful retries the process exits
+with an error. A successful poll resets the retry count. Credential errors,
+another poller's HTTP 409, and Telegram HTTP 429 restrictions are terminal:
+do not bypass these errors or run several consumers on one bot token.
+
+A potentially ambiguous **link-creation write is never retried** automatically.
+When Telegram may have created a link but local registration failed, inspect
+the real group invite links before taking further action.
+
+Both `optin_join_links.py` and `growth_tracker.py` require the same explicit
+`TELEGRAM_GROWTH_BOT_DEDICATED=1` declaration and reject a token visibly
+shared with an existing bot. They verify the target is a group or supergroup,
+not a broadcast channel. The declaration is **not** proof of exclusive ownership
+on another machine.
+
+The repo contains the **inert** file
+`ecosystem.growth.example.config.js` for the existing PM2 installation.
+It is not included in the legacy `ecosystem.config.js`, has no token or
+automatic launch, and cannot start by a GitHub merge alone. Only after the
+real VPS checkout has been backed up, the bot token independently checked,
+the account permissions verified and the Python preflight passed should an
+operator consider starting the metrics worker. Example manual commands:
+
+```bash
+python3 scripts/growth_tracker.py --check
+# Only when preflight passed AND the dedicated bot is confirmed:
+pm2 start ecosystem.growth.example.config.js --only TELEGRAM-LEADS-METRICS
+pm2 status TELEGRAM-LEADS-METRICS
+python3 scripts/growth_tracker.py --stats
+```
+
+The PM2 template uses the existing checkout's `.venv/bin/python`; it must
+exist on the VPS. **Do not run** the example while another poller/webhook uses
+that bot, while session/backup posture is unknown, or in a shared unattended
+GitHub Actions runner. A passing source-code test suite does not certify
+Telegram connectivity, bot permissions, actual joins or VPS uptime.

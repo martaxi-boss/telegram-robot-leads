@@ -3,7 +3,14 @@
 .env.*
 !.env.example
 *.session
+*.session-journal
+*.session-shm
+*.session-wal
 accounts.json
+telegram_api.json
+*.db-journal
+*.db-shm
+*.db-wal
 
 # Python
 .venv/

@@ -14,11 +14,12 @@ from pathlib import Path
 import sqlite3
 import stat
 import sys
+import time
 from typing import Any, Callable
 
 from growth_store import apply_updates, default_db_path, next_offset, prune, statistics, store_connection
 from lead_health import read_env_names_and_values
-from optin_join_links import BotAccessError, check_access, request_telegram
+from optin_join_links import BotAccessError, BotTransientError, check_access, request_telegram, validate_dedicated_bot, verify_target_group
 
 ALLOWED_UPDATES = json.dumps(['chat_join_request', 'chat_member'])
 
@@ -31,24 +32,7 @@ def verify_polling(api: Callable[[str, dict[str, str]], Any], chat_id: str) -> s
         raise BotAccessError('Telegram returned malformed webhook status')
     if webhook.get('url'):
         raise BotAccessError('Webhook already configured: do not consume another bot integration')
-    chat = api('getChat', {'chat_id': chat_id})
-    canonical_id = chat.get('id') if isinstance(chat, dict) else None
-    if not isinstance(canonical_id, int) or isinstance(canonical_id, bool):
-        raise BotAccessError('Cannot verify the numeric Telegram group ID')
-    if chat.get('type') not in {'group', 'supergroup'}:
-        raise BotAccessError('Target must be a Telegram group or supergroup')
-    return str(canonical_id)
-
-
-def validate_dedicated_bot(token: str, configured: dict[str, str]) -> None:
-    """Fail closed unless operator attests that the token has no other consumer."""
-    explicit = os.environ.get('TELEGRAM_GROWTH_BOT_DEDICATED') or configured.get('TELEGRAM_GROWTH_BOT_DEDICATED', '0')
-    if explicit.strip().lower() not in {'1', 'true', 'yes', 'on'}:
-        raise BotAccessError('Dedicated Telegram bot is not confirmed; refusing online preflight or polling')
-    for key in ('TELEGRAM_BOT_TOKEN', 'BOT_TOKEN', 'IPTVPN_BOT_TOKEN'):
-        legacy = os.environ.get(key) or configured.get(key)
-        if legacy and legacy == token:
-            raise BotAccessError('Growth bot token is already configured for another Telegram bot')
+    return verify_target_group(api, chat_id)
 
 
 def validate_storage(root: Path) -> None:
@@ -80,6 +64,32 @@ def poll_once(db: sqlite3.Connection, api: Callable[[str, dict[str, str]], Any],
     prune(db)
     return {'updates_received': len(batch), 'next_offset': end,
             'metrics': statistics(db)['totals']}
+
+
+def run_with_recovery(db: sqlite3.Connection, api: Callable[[str, dict[str, str]], Any],
+                      chat_id: str, token: str,
+                      sleep: Callable[[float], None] = time.sleep) -> None:
+    """Retry only temporary read-only polling faults with bounded backoff.
+
+    Credentials/permissions, 409 poll conflicts and rate-limit errors fail
+    immediately. No outbound membership-changing calls are made here.
+    """
+    transient_failures = 0
+    while True:
+        try:
+            poll_once(db, api, chat_id, token)
+        except BotTransientError:
+            transient_failures += 1
+            if transient_failures > 6:
+                raise BotAccessError('Polling unavailable after six bounded retries') from None
+            delay = min(2 ** transient_failures, 60)
+            print(json.dumps({'status': 'temporary_poll_error',
+                              'retry_in_seconds': delay,
+                              'consecutive_failures': transient_failures}),
+                  file=sys.stderr)
+            sleep(delay)
+        else:
+            transient_failures = 0
 
 
 def main() -> int:
@@ -126,11 +136,11 @@ def main() -> int:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 chat_id = verify_polling(api, group)
                 with store_connection(path) as db:
-                    while True:
+                    if args.once:
                         out = poll_once(db, api, chat_id, token)
-                        if args.once:
-                            print(json.dumps({'status': 'committed', **out}, ensure_ascii=False))
-                            break
+                        print(json.dumps({'status': 'committed', **out}, ensure_ascii=False))
+                    else:
+                        run_with_recovery(db, api, chat_id, token)
                 return 0
         except BlockingIOError:
             raise BotAccessError('Another local metrics poller holds the lock') from None

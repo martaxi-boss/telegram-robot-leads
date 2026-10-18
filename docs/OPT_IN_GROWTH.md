@@ -10,13 +10,28 @@ second instance or a second set of Telegram accounts when seeing that old name.
 The separate `martaxi-boss/iptvpn-bot` project remains a different application,
 with independent credentials and processes.
 
-The live VPS audit on 2026-10-18 found the same project's existing protected
-credentials at `/root/project-secrets/TELEGRAM-IPTVPN/.env`, including two
-session files in that directory. The **intended canonical** vault directory name
-is `/root/project-secrets/telegram-robot-leads/`, but a filesystem rename was
-**not completed by the authorized automation** and must not be assumed. Keep
-reading the actual existing path until the migration is independently verified.
-Do not copy or log secrets to solve a naming mismatch.
+**Verified operational rename (2026-10-18):** the same project's credential
+directory was moved on the existing VPS `vps-32bea5b6` from the old
+`/root/project-secrets/TELEGRAM-IPTVPN/` location to its **current, canonical**
+`/root/project-secrets/telegram-robot-leads/` location. The same five protected
+files were preserved, including the existing `.env`, `accounts.json`, and two
+Telegram `.session` files. The old directory is now absent, and the separate
+`/root/project-secrets/iptvpn_bot/` vault remains untouched.
+
+Evidence: [guarded atomic rename, GitHub Actions #39158397322](https://github.com/martaxi-boss/VPS/actions/runs/39158397322)
+and [independent read-only postflight #39158539431](https://github.com/martaxi-boss/VPS/actions/runs/39158539431).
+These runs checked only path, file and permission metadata; no credentials were
+exposed, no processes restarted, and no Telegram API login was attempted.
+
+Some legacy source/configuration files still refer to the historical
+`TELEGRAM-IPTVPN` PM2 process name or `/root/TELEGRAM-IPTVPN` runtime
+checkout. Those are **historical references, not the vault location**.
+No such runtime checkout or running Telegram Leads worker was observed on
+this VPS as of the 2026-10-18 audit. Do not start legacy
+`ecosystem.config.js` unchanged. Safe opt-in metrics files were independently
+staged (but **not started**) at `/opt/telegram-leads-optin/`; their runtime
+credentials and Telegram bot administrator permissions remain a separate
+activation check. Do not mistake Telethon API ID/hash for a BotFather bot token.
 
 
 These tools preserve the existing Telethon/SQLite baseline and **do not deploy, restart,

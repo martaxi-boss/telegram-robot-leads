@@ -1,8 +1,10 @@
 from pathlib import Path
 import os
+import json
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -61,6 +63,38 @@ class OperationPolicyTests(unittest.TestCase):
         policy.block_account(state, 2, "PeerFloodError")
         with self.assertRaises(policy.PolicyBlocked):
             policy.check_action(state, 2, "group_join", now=10000)
+
+    def test_malformed_usage_counters_block(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "operation-state.json"
+            state = policy.empty_state()
+            state["accounts"]["1"]["member_adds"] = "not-a-number"
+            path.write_text(json.dumps(state), encoding="utf-8")
+            with self.assertRaises(policy.PolicyBlocked):
+                policy.load_state(path)
+
+    def test_pending_outcomes_and_flood_block_survive_midnight(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "operation-state.json"
+            state = policy.empty_state()
+            policy.block_account(state, 1, "PeerFloodError")
+            state["pending_group_actions"]["@examplegroup"] = {"account": 1}
+            state["pending_member_actions"]["@exampleuser"] = {"account": 2}
+            policy.save_state(path, state)
+            with patch.object(policy, "_today", return_value="2099-01-02"):
+                restored = policy.load_state(path)
+            self.assertTrue(restored["accounts"]["1"]["blocked"])
+            self.assertIn("@examplegroup", restored["pending_group_actions"])
+            self.assertIn("@exampleuser", restored["pending_member_actions"])
+
+    def test_symlinked_state_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root) / "real.json"
+            policy.save_state(source, policy.empty_state())
+            alias = Path(root) / "operation-state.json"
+            alias.symlink_to(source)
+            with self.assertRaises(policy.PolicyBlocked):
+                policy.load_state(alias)
 
 
 class SafeRuntimeInputTests(unittest.TestCase):

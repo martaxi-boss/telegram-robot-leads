@@ -135,10 +135,16 @@ async def _join_one(
     canonical = group.lower()
     if canonical in state["joined_groups"]:
         return "already_recorded"
+    if canonical in state["pending_group_actions"]:
+        raise PolicyBlocked("group_action_outcome_unknown_manual_reconciliation_required")
     check_action(state, account_number, "group_join")
     client = await _connected_client(config, account_number)
     try:
         entity = await asyncio.wait_for(client.get_entity(group), timeout=20)
+        # Persist BEFORE contacting Telegram. A timeout after submission has
+        # an unknowable remote outcome and must never trigger automatic replay.
+        state["pending_group_actions"][canonical] = {"account": account_number}
+        save_state(_state_path(), state)
         try:
             await asyncio.wait_for(client(JoinChannelRequest(entity)), timeout=25)
             record_success(state, account_number, "group_join")
@@ -146,12 +152,14 @@ async def _join_one(
                 "account": account_number,
                 "status": "joined",
             }
+            state["pending_group_actions"].pop(canonical, None)
             return "joined"
         except errors.UserAlreadyParticipantError:
             state["joined_groups"][canonical] = {
                 "account": account_number,
                 "status": "already_member",
             }
+            state["pending_group_actions"].pop(canonical, None)
             return "already_member"
     except Exception as exc:
         if _is_hard_stop(exc):
@@ -171,11 +179,15 @@ async def _add_one(
     canonical = username.lower()
     if canonical in state["approved_users_done"]:
         return "already_recorded"
+    if canonical in state["pending_member_actions"]:
+        raise PolicyBlocked("member_action_outcome_unknown_manual_reconciliation_required")
     check_action(state, account_number, "member_add")
     client = await _connected_client(config, account_number)
     try:
         target = await asyncio.wait_for(client.get_entity(config["group"]), timeout=20)
         user = await asyncio.wait_for(client.get_input_entity(username), timeout=20)
+        state["pending_member_actions"][canonical] = {"account": account_number}
+        save_state(_state_path(), state)
         try:
             await asyncio.wait_for(
                 client(InviteToChannelRequest(target, [user])), timeout=25
@@ -185,12 +197,14 @@ async def _add_one(
                 "account": account_number,
                 "status": "added",
             }
+            state["pending_member_actions"].pop(canonical, None)
             return "added"
         except errors.UserAlreadyParticipantError:
             state["approved_users_done"][canonical] = {
                 "account": account_number,
                 "status": "already_member",
             }
+            state["pending_member_actions"].pop(canonical, None)
             return "already_member"
         except (errors.UserPrivacyRestrictedError, errors.UserChannelsTooMuchError) as exc:
             state["approved_users_done"][canonical] = {
@@ -198,6 +212,7 @@ async def _add_one(
                 "status": "not_addable",
                 "reason": type(exc).__name__,
             }
+            state["pending_member_actions"].pop(canonical, None)
             return "not_addable"
     except Exception as exc:
         if _is_hard_stop(exc):

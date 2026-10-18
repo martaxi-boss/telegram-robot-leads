@@ -12,6 +12,7 @@ participants, mimic human behaviour, or retry abuse/rate-limit signals.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import asyncio
 import hashlib
 import json
@@ -135,10 +136,16 @@ async def _join_one(
     canonical = group.lower()
     if canonical in state["joined_groups"]:
         return "already_recorded"
+    if canonical in state["pending_group_actions"]:
+        raise PolicyBlocked("group_action_outcome_unknown_manual_reconciliation_required")
     check_action(state, account_number, "group_join")
     client = await _connected_client(config, account_number)
     try:
         entity = await asyncio.wait_for(client.get_entity(group), timeout=20)
+        # Persist BEFORE contacting Telegram. A timeout after submission has
+        # an unknowable remote outcome and must never trigger automatic replay.
+        state["pending_group_actions"][canonical] = {"account": account_number}
+        save_state(_state_path(), state)
         try:
             await asyncio.wait_for(client(JoinChannelRequest(entity)), timeout=25)
             record_success(state, account_number, "group_join")
@@ -146,12 +153,14 @@ async def _join_one(
                 "account": account_number,
                 "status": "joined",
             }
+            state["pending_group_actions"].pop(canonical, None)
             return "joined"
         except errors.UserAlreadyParticipantError:
             state["joined_groups"][canonical] = {
                 "account": account_number,
                 "status": "already_member",
             }
+            state["pending_group_actions"].pop(canonical, None)
             return "already_member"
     except Exception as exc:
         if _is_hard_stop(exc):
@@ -171,11 +180,15 @@ async def _add_one(
     canonical = username.lower()
     if canonical in state["approved_users_done"]:
         return "already_recorded"
+    if canonical in state["pending_member_actions"]:
+        raise PolicyBlocked("member_action_outcome_unknown_manual_reconciliation_required")
     check_action(state, account_number, "member_add")
     client = await _connected_client(config, account_number)
     try:
         target = await asyncio.wait_for(client.get_entity(config["group"]), timeout=20)
         user = await asyncio.wait_for(client.get_input_entity(username), timeout=20)
+        state["pending_member_actions"][canonical] = {"account": account_number}
+        save_state(_state_path(), state)
         try:
             await asyncio.wait_for(
                 client(InviteToChannelRequest(target, [user])), timeout=25
@@ -185,12 +198,14 @@ async def _add_one(
                 "account": account_number,
                 "status": "added",
             }
+            state["pending_member_actions"].pop(canonical, None)
             return "added"
         except errors.UserAlreadyParticipantError:
             state["approved_users_done"][canonical] = {
                 "account": account_number,
                 "status": "already_member",
             }
+            state["pending_member_actions"].pop(canonical, None)
             return "already_member"
         except (errors.UserPrivacyRestrictedError, errors.UserChannelsTooMuchError) as exc:
             state["approved_users_done"][canonical] = {
@@ -198,6 +213,7 @@ async def _add_one(
                 "status": "not_addable",
                 "reason": type(exc).__name__,
             }
+            state["pending_member_actions"].pop(canonical, None)
             return "not_addable"
     except Exception as exc:
         if _is_hard_stop(exc):
@@ -211,7 +227,7 @@ async def _add_one(
             await client.disconnect()
 
 
-async def run_once(vault: Path = DEFAULT_VAULT) -> dict:
+async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     config = inspect(vault)
     if config["api_source"] != "private_app_credentials":
         raise ProbeBlocked("automatic_runtime_requires_private_app_credentials")
@@ -267,6 +283,32 @@ async def run_once(vault: Path = DEFAULT_VAULT) -> dict:
             save_state(path, state)
 
     return report
+
+
+async def run_once(vault: Path = DEFAULT_VAULT) -> dict:
+    """Serialize the entire read/check/API/write cycle across all local workers.
+
+    Never wait behind another active worker: a duplicate runtime must fail
+    closed rather than queue Telegram side effects for a later replay.
+    """
+    state_path = _state_path()
+    if state_path.is_symlink() or state_path.parent.is_symlink():
+        raise PolicyBlocked("state_path_symlink_invalid")
+    state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock_path = state_path.with_name(state_path.name + ".lock")
+    if lock_path.is_symlink():
+        raise PolicyBlocked("state_lock_symlink_invalid")
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        if os.fstat(fd).st_uid != os.geteuid():
+            raise PolicyBlocked("state_lock_owner_invalid")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise PolicyBlocked("another_runtime_active") from exc
+        return await _run_once_unlocked(vault)
+    finally:
+        os.close(fd)
 
 
 async def loop(vault: Path, interval: int) -> None:

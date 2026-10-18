@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 import time
@@ -47,10 +48,15 @@ def empty_state(tz_name: str = DEFAULT_TZ) -> dict:
         "accounts": {"1": _new_account(), "2": _new_account()},
         "joined_groups": {},
         "approved_users_done": {},
+        "pending_group_actions": {},
+        "pending_member_actions": {},
     }
 
 
 def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
+    """Treat malformed or ambiguous state as a hard stop, never as zero usage."""
+    if path.is_symlink():
+        raise PolicyBlocked("state_symlink_invalid")
     if not path.exists():
         return empty_state(tz_name)
     try:
@@ -59,25 +65,44 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
         raise PolicyBlocked("state_unreadable") from exc
     if not isinstance(data, dict):
         raise PolicyBlocked("state_invalid")
-    if not isinstance(data.get("joined_groups", {}), dict):
-        raise PolicyBlocked("state_joined_groups_invalid")
-    if not isinstance(data.get("approved_users_done", {}), dict):
-        raise PolicyBlocked("state_approved_users_invalid")
-    if data.get("day") != _today(tz_name):
-        joined = data.get("joined_groups", {})
-        done = data.get("approved_users_done", {})
-        data = empty_state(tz_name)
-        data["joined_groups"] = joined
-        data["approved_users_done"] = done
+    for key in ("joined_groups", "approved_users_done",
+                "pending_group_actions", "pending_member_actions"):
+        if key not in data:
+            data[key] = {}
+        if not isinstance(data[key], dict):
+            raise PolicyBlocked("state_mapping_invalid")
+    accounts = data.get("accounts")
+    if not isinstance(accounts, dict):
+        raise PolicyBlocked("state_accounts_invalid")
     for key in ("1", "2"):
-        account = data.setdefault("accounts", {}).setdefault(key, _new_account())
-        for required in ("group_joins", "member_adds", "last_action", "blocked"):
-            if required not in account:
+        account = accounts.get(key)
+        if not isinstance(account, dict):
+            raise PolicyBlocked("state_account_invalid")
+        for field in ("group_joins", "member_adds", "last_action"):
+            value = account.get(field)
+            if (type(value) is not int or value < 0) and not (field == "last_action" and type(value) is float and math.isfinite(value) and value >= 0):
                 raise PolicyBlocked("state_account_invalid")
+        if type(account.get("blocked")) is not bool:
+            raise PolicyBlocked("state_account_invalid")
+        if account.get("blocked") and not isinstance(account.get("reason"), str):
+            raise PolicyBlocked("state_block_reason_invalid")
+    if data.get("day") != _today(tz_name):
+        # Keep pending remote outcomes and platform hard stops across midnight.
+        previous = data
+        data = empty_state(tz_name)
+        for key in ("joined_groups", "approved_users_done",
+                    "pending_group_actions", "pending_member_actions"):
+            data[key] = previous[key]
+        for key in ("1", "2"):
+            prior = previous["accounts"][key]
+            data["accounts"][key]["blocked"] = prior["blocked"]
+            data["accounts"][key]["reason"] = prior.get("reason")
+            data["accounts"][key]["last_action"] = prior["last_action"]
     return data
 
-
 def save_state(path: Path, state: dict) -> None:
+    if path.is_symlink():
+        raise PolicyBlocked("state_symlink_invalid")
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", dir=str(path.parent))
     try:

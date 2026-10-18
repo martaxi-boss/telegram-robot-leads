@@ -2,6 +2,12 @@
 
 Updated: 2026-10-18
 
+## Canonical runtime update (2026-10-18)
+
+The live `main` branch now uses a short `main.py` wrapper which invokes `scripts/safe_runtime.py`; the historical 2,312-line discovery/scraping/addition engine is **not the active entrypoint**. The canonical process name is `telegram-robot-leads` in `ecosystem.config.js`. Allowed input files are `group_allowlist.txt` and `approved_users.txt` in the project-specific private vault. The new runtime has durable state, a pre-network-action ambiguity journal and single-instance file locking. It does not harvest members or discover other groups. The presence of these files never substitutes for valid, demonstrable user permission.
+
+The older architecture assessment and original 49-test result below are **historical evidence, not the latest implementation certification**. The latest safe runtime was integrated by PR #22, and the subsequent reliability/hygiene changes are tracked separately in PR #24. Before a production claim, certify the exact merged commit, verify private application credentials, state and path permissions, and execute a separately bounded VPS deployment check. Do not operate the former legacy engine or reuse the unrelated IPTV bot's credentials or processes.
+
 ## Phase
 
 **Legacy recovery and safe diagnostics; discovery architecture still unapproved for production**

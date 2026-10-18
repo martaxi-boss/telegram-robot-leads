@@ -28,19 +28,24 @@ class HealthTests(unittest.TestCase):
             self.assertNotIn("TOP_SECRET_HERE", data)
             self.assertNotIn("BOT_TOKEN_PRIVATE", data)
             self.assertTrue(result["credentials"]["telegram_api_hash_configured"])
-            self.assertEqual(result["configuration_candidates"]["MAX_ADDS_PROJECT_PER_DAY"]["value"], "17")
+            self.assertEqual(result["legacy_config_keys_present"], 1)
+            self.assertNotIn("MAX_ADDS_PROJECT_PER_DAY", result["configuration_candidates"])
+            self.assertNotIn("17", data)
             self.assertFalse(result["credentials"]["connectivity_verified"])
 
-    def test_pm2_dotenv_precedence(self):
+    def test_canonical_pm2_status_and_vault_group_source(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            (root / ".env").write_text("MAX_ADDS_PROJECT_PER_DAY=42\n")
-            p = {"name": "TELEGRAM-IPTVPN", "pid": 123, "pm2_env": {"status": "online", "DOTENV_OVERRIDE": "1", "MAX_ADDS_PROJECT_PER_DAY": "100"}}
-            actual = lead_health.inspect(root, [p])
-            self.assertEqual(actual["configuration_candidates"]["MAX_ADDS_PROJECT_PER_DAY"], {"value": "42", "source": ".env"})
-            p["pm2_env"]["DOTENV_OVERRIDE"] = "0"
-            actual = lead_health.inspect(root, [p])
-            self.assertEqual(actual["configuration_candidates"]["MAX_ADDS_PROJECT_PER_DAY"], {"value": "100", "source": "pm2"})
+            (root / ".env").write_text("TARGET_GROUP=@vaultgroup" + chr(10))
+            proc = {"name": "telegram-robot-leads", "pid": 123,
+                    "pm2_env": {"status": "online", "TARGET_GROUP": "@othergroup"}}
+            actual = lead_health.inspect(root, [proc])
+            self.assertTrue(actual["runtime"]["found"])
+            self.assertEqual(actual["runtime"]["status"], "online")
+            self.assertEqual(actual["configuration_candidates"]["TARGET_GROUP"],
+                             {"value": "@vaultgroup", "source": ".env"})
+            self.assertFalse(actual["legacy_runtime"]["found"])
+
 
     def test_database_read_only(self):
         with tempfile.TemporaryDirectory() as td:
@@ -49,9 +54,9 @@ class HealthTests(unittest.TestCase):
             db.executescript("CREATE TABLE users (user_id INTEGER PRIMARY KEY); INSERT INTO users VALUES (1); CREATE TABLE adder_daily (day TEXT, adds_ok INTEGER); INSERT INTO adder_daily VALUES ('2026-10-18', 5);")
             db.close()
             result = lead_health.inspect(root, [])
-            self.assertEqual(result["database"]["candidate_count"], 1)
-            self.assertEqual(result["database"]["last_accounting_additions"], 5)
-            self.assertEqual(result["database"]["mode"], "read-only")
+            self.assertEqual(result["legacy_database_read_only"]["candidate_count"], 1)
+            self.assertEqual(result["legacy_database_read_only"]["last_accounting_additions"], 5)
+            self.assertEqual(result["legacy_database_read_only"]["mode"], "read-only")
 
     def test_secure_external_vault_file_requires_private_regular_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -105,12 +110,12 @@ class HealthTests(unittest.TestCase):
         self.assertIn('telegram-robot-leads-status.sh', legacy)
         self.assertNotIn('sqlite3.connect', legacy)
         self.assertNotIn('tail -', legacy)
-        self.assertIn('--no-pm2', current)
+        self.assertNotIn('--no-pm2', current)
         self.assertIn('/root/project-secrets/telegram-robot-leads', current)
         self.assertIn('--stats', current)
 
     def test_invalid_config_redacted(self):
-        self.assertEqual(lead_health._safe_value("MAX_ADDS_PROJECT_PER_DAY", "password123"), "INVALID")
+        self.assertEqual(lead_health._safe_value("TELEGRAM_OPERATION_STATE", "/private/path"), "CONFIGURED")
         self.assertEqual(lead_health._safe_value("TARGET_GROUP", "SECRET&value"), "INVALID")
 
 

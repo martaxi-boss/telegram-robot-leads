@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import json
 import asyncio
+import fcntl
 import sys
 import tempfile
 import unittest
@@ -88,6 +89,16 @@ class OperationPolicyTests(unittest.TestCase):
             self.assertIn("@examplegroup", restored["pending_group_actions"])
             self.assertIn("@exampleuser", restored["pending_member_actions"])
 
+    def test_non_integer_counter_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "state.json"
+            for invalid in (1.5, float("nan"), float("inf"), True):
+                state = policy.empty_state()
+                state["accounts"]["1"]["member_adds"] = invalid
+                path.write_text(json.dumps(state), encoding="utf-8")
+                with self.assertRaises(policy.PolicyBlocked):
+                    policy.load_state(path)
+
     def test_symlinked_state_is_rejected(self):
         with tempfile.TemporaryDirectory() as root:
             source = Path(root) / "real.json"
@@ -143,6 +154,18 @@ class SafeRuntimeInputTests(unittest.TestCase):
         second = safe_runtime.assigned_account("@examplegroup")
         self.assertEqual(first, second)
         self.assertIn(first, (1, 2))
+
+    def test_second_instance_cannot_enter_runtime(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "state.json"
+            lock = Path(root) / "state.json.lock"
+            with open(lock, "w", encoding="utf-8") as held:
+                fcntl.flock(held.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with patch.object(safe_runtime, "_state_path", return_value=path), patch.object(
+                    safe_runtime, "_run_once_unlocked", side_effect=AssertionError("should never run")
+                ):
+                    with self.assertRaisesRegex(policy.PolicyBlocked, "another_runtime_active"):
+                        asyncio.run(safe_runtime.run_once(self.vault))
 
     def test_unresolved_outcome_is_never_auto_replayed(self):
         async def check():

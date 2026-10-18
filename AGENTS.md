@@ -1,6 +1,9 @@
 # Agent Governance
 
-This file is the repository-level agent entrypoint for `Alaska-Digital/telegram-iptvpn`.
+Current live runtime: `main.py` delegates to `scripts/safe_runtime.py`; operational status is provided by `scripts/telegram-robot-leads-status.sh`. Historical architecture findings do not authorize running legacy scraping or bulk-add logic. See `docs/PROJECT-STATE.md` for the current state.
+
+
+This file is the repository-level agent entrypoint for `martaxi-boss/telegram-robot-leads`.
 
 Repository evidence, accepted governance records, source, certification evidence and live GitHub state take precedence over chat assertions, stale checkpoints and static SHA references when determining current truth.
 

@@ -35,3 +35,8 @@ oportunidades_hoje.txt
 .idea/
 
 users.db
+
+# Independent voluntary-admission metrics; never version user-derived state
+growth_metrics.sqlite3
+growth_metrics.sqlite3-*
+growth_metrics.lock

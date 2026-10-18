@@ -1,4 +1,7 @@
+import contextlib
+import io
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -50,6 +53,51 @@ class HealthTests(unittest.TestCase):
             self.assertEqual(result["database"]["last_accounting_additions"], 5)
             self.assertEqual(result["database"]["mode"], "read-only")
 
+    def test_secure_external_vault_file_requires_private_regular_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            secret = root / '.env'
+            secret.write_text('TARGET_GROUP=@iptvpncode\n')
+            secret.chmod(0o600)
+            self.assertEqual(lead_health.read_env_names_and_values(
+                secret, owner_only=True)['TARGET_GROUP'], '@iptvpncode')
+            secret.chmod(0o644)
+            with self.assertRaises(PermissionError):
+                lead_health.read_env_names_and_values(secret, owner_only=True)
+            secret.chmod(0o600)
+            linked = root / 'linked.env'
+            linked.symlink_to(secret)
+            with self.assertRaises(PermissionError):
+                lead_health.read_env_names_and_values(linked, owner_only=True)
+
+    def test_secure_external_vault_rejects_unprivate_parent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            secret = root / '.env'
+            secret.write_text('TARGET_GROUP=@iptvpncode\n')
+            secret.chmod(0o600)
+            root.chmod(0o755)
+            try:
+                with self.assertRaises(PermissionError):
+                    lead_health.read_env_names_and_values(secret, owner_only=True)
+            finally:
+                root.chmod(0o700)
+
+    def test_health_no_pm2_does_not_spawn_an_external_process(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = io.StringIO()
+            with (
+                patch('sys.argv', ['lead_health.py', '--root', directory, '--no-pm2']),
+                patch('lead_health.read_pm2',
+                      side_effect=AssertionError('PM2 must not be queried')),
+                contextlib.redirect_stdout(output),
+            ):
+                self.assertEqual(lead_health.main(), 0)
+            report = json.loads(output.getvalue())
+            self.assertEqual(report['project'], 'telegram-robot-leads')
+            self.assertEqual(report['metrics_runtime']['status'], 'not_found')
+            self.assertIn('not queried', report['runtime']['diagnostic'])
+
     def test_invalid_config_redacted(self):
         self.assertEqual(lead_health._safe_value("MAX_ADDS_PROJECT_PER_DAY", "password123"), "INVALID")
         self.assertEqual(lead_health._safe_value("TARGET_GROUP", "SECRET&value"), "INVALID")
@@ -82,6 +130,38 @@ class OptInTests(unittest.TestCase):
             return {"id": 42} if method == "getMe" else {"status": "administrator", "can_invite_users": False}
         with self.assertRaisesRegex(optin_join_links.BotAccessError, "can_invite_users"):
             optin_join_links.create_join_request_link(api, "@iptvpncode", "campaign1")
+
+    def test_optin_check_reads_external_vault_without_copying_secrets(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as vault:
+            token = 'FAKE_PRIVATE_12345'
+            key = Path(vault) / '.env'
+            key.write_text(
+                'TELEGRAM_GROWTH_BOT_TOKEN=' + token + '\n'
+                + 'TELEGRAM_GROWTH_BOT_DEDICATED=1\n'
+                + 'TARGET_GROUP=@iptvpncode\n')
+            key.chmod(0o600)
+            methods = []
+            def api(_token, method, payload):
+                methods.append(method)
+                if method == 'getMe':
+                    return {'id': 12345, 'username': 'safe'}
+                if method == 'getChatMember':
+                    return {'status': 'administrator', 'can_invite_users': True}
+                if method == 'getChat':
+                    return {'id': -100234567890, 'type': 'supergroup'}
+                raise AssertionError('Unexpected Telegram call')
+            output = io.StringIO()
+            with (
+                patch.dict(os.environ, {}, clear=True),
+                patch('sys.argv', ['optin_join_links.py', '--root', directory,
+                                   '--env-file', str(key), '--check']),
+                patch('optin_join_links.request_telegram', side_effect=api),
+                contextlib.redirect_stdout(output),
+            ):
+                self.assertEqual(optin_join_links.main(), 0)
+            self.assertEqual(methods, ['getMe', 'getChatMember', 'getChat'])
+            self.assertNotIn(token, output.getvalue())
+            self.assertFalse((Path(directory) / 'growth_metrics.sqlite3').exists())
 
     def test_http_error_does_not_expose_token(self):
         from urllib.error import HTTPError

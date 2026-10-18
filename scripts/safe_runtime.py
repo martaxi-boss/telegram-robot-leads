@@ -12,6 +12,7 @@ participants, mimic human behaviour, or retry abuse/rate-limit signals.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import asyncio
 import hashlib
 import json
@@ -226,7 +227,7 @@ async def _add_one(
             await client.disconnect()
 
 
-async def run_once(vault: Path = DEFAULT_VAULT) -> dict:
+async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     config = inspect(vault)
     if config["api_source"] != "private_app_credentials":
         raise ProbeBlocked("automatic_runtime_requires_private_app_credentials")
@@ -282,6 +283,32 @@ async def run_once(vault: Path = DEFAULT_VAULT) -> dict:
             save_state(path, state)
 
     return report
+
+
+async def run_once(vault: Path = DEFAULT_VAULT) -> dict:
+    """Serialize the entire read/check/API/write cycle across all local workers.
+
+    Never wait behind another active worker: a duplicate runtime must fail
+    closed rather than queue Telegram side effects for a later replay.
+    """
+    state_path = _state_path()
+    if state_path.is_symlink() or state_path.parent.is_symlink():
+        raise PolicyBlocked("state_path_symlink_invalid")
+    state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock_path = state_path.with_name(state_path.name + ".lock")
+    if lock_path.is_symlink():
+        raise PolicyBlocked("state_lock_symlink_invalid")
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        if os.fstat(fd).st_uid != os.geteuid():
+            raise PolicyBlocked("state_lock_owner_invalid")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise PolicyBlocked("another_runtime_active") from exc
+        return await _run_once_unlocked(vault)
+    finally:
+        os.close(fd)
 
 
 async def loop(vault: Path, interval: int) -> None:

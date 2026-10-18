@@ -1,0 +1,33 @@
+name: Telegram Leads safe checks
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "docs/OPT_IN_GROWTH.md"
+      - ".github/workflows/safe-growth-checks.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - "docs/OPT_IN_GROWTH.md"
+      - ".github/workflows/safe-growth-checks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Syntax validation (including legacy main)
+        run: python -m py_compile main.py scripts/lead_health.py scripts/optin_join_links.py scripts/growth_store.py scripts/growth_tracker.py
+      - name: Local tests (no external credentials)
+        run: python -m unittest discover -s tests -v

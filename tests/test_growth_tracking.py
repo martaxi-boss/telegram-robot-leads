@@ -139,7 +139,7 @@ class TrackerTests(unittest.TestCase):
 
     def test_poll_once_commits_before_offset_advances(self):
         with tempfile.TemporaryDirectory() as td:
-            with s.open_store(Path(td) / s.DEFAULT_FILE) as db:
+            with s.store_connection(Path(td) / s.DEFAULT_FILE) as db:
                 s.register_campaign(db, CHAT, 'website', LINK)
                 seen = []
                 def api(method, params):
@@ -171,12 +171,12 @@ class TrackerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             def api(token, method, payload, **kwargs):
                 self.assertEqual(token, TOKEN)
-                if method == 'getChat': return {'id': int(CHAT)}
+                if method == 'getChat': return {'id': int(CHAT), 'type': 'supergroup'}
                 if method == 'getMe': return {'id': 55}
                 if method == 'getChatMember': return {'status': 'administrator', 'can_invite_users': True}
                 if method == 'createChatInviteLink': return {'invite_link': LINK}
                 raise AssertionError(method)
-            with patch.dict(os.environ, {'TELEGRAM_GROWTH_BOT_TOKEN': TOKEN, 'TARGET_GROUP': '@iptvpncode'}), \
+            with patch.dict(os.environ, {'TELEGRAM_GROWTH_BOT_TOKEN': TOKEN, 'TELEGRAM_GROWTH_BOT_DEDICATED': '1', 'TARGET_GROUP': '@iptvpncode'}), \
                  patch('optin_join_links.request_telegram', side_effect=api), \
                  patch('sys.argv', ['optin_join_links.py', '--root', td, '--create-link', 'website']):
                 buf = io.StringIO()
@@ -186,7 +186,7 @@ class TrackerTests(unittest.TestCase):
                 self.assertEqual(output['status'], 'created_and_registered')
                 self.assertEqual(output['join_request_link'], LINK)
                 self.assertNotIn(LINK.encode(), (Path(td) / s.DEFAULT_FILE).read_bytes())
-                with s.open_store(Path(td) / s.DEFAULT_FILE) as db:
+                with s.store_connection(Path(td) / s.DEFAULT_FILE) as db:
                     self.assertEqual(db.execute('SELECT name,chat_id FROM campaigns').fetchone(), ('website', CHAT))
 
 

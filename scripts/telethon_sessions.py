@@ -43,7 +43,7 @@ def _private_dir(path: Path) -> None:
         raise ProbeBlocked("private_vault_permissions_invalid")
 
 
-def _private_file(path: Path, vault: Path) -> None:
+def _private_file(path: Path, vault: Path, *, max_bytes: int = 131072) -> None:
     if path.parent != vault or path.is_symlink():
         raise ProbeBlocked("private_file_path_invalid")
     try:
@@ -53,7 +53,7 @@ def _private_file(path: Path, vault: Path) -> None:
     if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid()
             or stat.S_IMODE(st.st_mode) & 0o077):
         raise ProbeBlocked("private_file_permissions_invalid")
-    if st.st_size < 1 or st.st_size > 131072:
+    if st.st_size < 1 or st.st_size > max_bytes:
         raise ProbeBlocked("private_file_size_invalid")
 
 
@@ -100,7 +100,7 @@ def _session_row(vault: Path, name: str) -> tuple[int, str, int, bytes]:
     if not SESSION_NAME.fullmatch(name):
         raise ProbeBlocked("session_name_invalid")
     path = vault / (name + ".session")
-    _private_file(path, vault)
+    _private_file(path, vault, max_bytes=128 * 1024 * 1024)
     if path.stat().st_size < 256:
         raise ProbeBlocked("session_file_too_small")
     # Immutable read: no WAL/lock/temp writes; old and new Telethon sessions

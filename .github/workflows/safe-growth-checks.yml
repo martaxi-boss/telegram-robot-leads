@@ -6,6 +6,7 @@ on:
       - "scripts/**"
       - "tests/**"
       - "docs/OPT_IN_GROWTH.md"
+      - "ecosystem.growth.example.config.js"
       - ".github/workflows/safe-growth-checks.yml"
   push:
     branches:
@@ -14,6 +15,7 @@ on:
       - "scripts/**"
       - "tests/**"
       - "docs/OPT_IN_GROWTH.md"
+      - "ecosystem.growth.example.config.js"
       - ".github/workflows/safe-growth-checks.yml"
 
 permissions:
@@ -31,3 +33,5 @@ jobs:
         run: python -m py_compile main.py scripts/lead_health.py scripts/optin_join_links.py scripts/growth_store.py scripts/growth_tracker.py
       - name: Local tests (no external credentials)
         run: python -m unittest discover -s tests -v
+      - name: PM2 config syntax (inert example, no deployment)
+        run: node --check ecosystem.growth.example.config.js

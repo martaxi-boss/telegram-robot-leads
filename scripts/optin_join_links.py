@@ -21,7 +21,11 @@ from growth_store import default_db_path, register_campaign, store_connection
 
 
 class BotAccessError(RuntimeError):
-    pass
+    """Non-retryable Bot API or authorization error."""
+
+
+class BotTransientError(BotAccessError):
+    """Transport/server fault safe to retry for READ-ONLY polling only."""
 
 
 def request_telegram(token: str, method: str, params: dict[str, str], timeout_sec: int = 15) -> Any:
@@ -36,9 +40,13 @@ def request_telegram(token: str, method: str, params: dict[str, str], timeout_se
             data = json.loads(response.read(1024 * 1024).decode("utf-8"))
     except HTTPError as exc:
         # HTTPError's URL includes the token: NEVER stringify the exception.
+        if exc.code in {500, 502, 503, 504}:
+            raise BotTransientError(f"Telegram API temporary HTTP {exc.code}") from None
         raise BotAccessError(f"Telegram API HTTP {exc.code}") from None
-    except (URLError, TimeoutError, OSError, ValueError):
-        raise BotAccessError("Telegram API unavailable or returned invalid JSON") from None
+    except (URLError, TimeoutError, OSError):
+        raise BotTransientError("Telegram API temporarily unreachable") from None
+    except ValueError:
+        raise BotAccessError("Telegram API returned invalid JSON") from None
     if not isinstance(data, dict) or data.get("ok") is not True:
         code = data.get("error_code", "unknown") if isinstance(data, dict) else "unknown"
         raise BotAccessError(f"Telegram API refused {method} (code {code})")
@@ -49,6 +57,28 @@ def request_telegram(token: str, method: str, params: dict[str, str], timeout_se
     elif not isinstance(result, dict):
         raise BotAccessError("Telegram API response has unexpected shape")
     return result
+
+
+def validate_dedicated_bot(token: str, configured: dict[str, str]) -> None:
+    """Require explicit exclusive bot-token ownership; do not reveal token values."""
+    explicit = os.environ.get("TELEGRAM_GROWTH_BOT_DEDICATED") or configured.get("TELEGRAM_GROWTH_BOT_DEDICATED", "0")
+    if explicit.strip().lower() not in {"1", "true", "yes", "on"}:
+        raise BotAccessError("Dedicated Telegram bot is not confirmed; refusing online preflight or polling")
+    for key in ("TELEGRAM_BOT_TOKEN", "BOT_TOKEN", "IPTVPN_BOT_TOKEN"):
+        legacy = os.environ.get(key) or configured.get(key)
+        if legacy and legacy == token:
+            raise BotAccessError("Growth bot token is already configured for another Telegram bot")
+
+
+def verify_target_group(api: Callable[[str, dict[str, str]], dict[str, Any]], chat_id: str) -> str:
+    """Accept only verified numeric group/supergroup IDs; never a channel."""
+    info = api("getChat", {"chat_id": chat_id})
+    group_id = info.get("id")
+    if not isinstance(group_id, int) or isinstance(group_id, bool):
+        raise BotAccessError("Telegram did not confirm the numeric group ID")
+    if info.get("type") not in {"group", "supergroup"}:
+        raise BotAccessError("Target must be a Telegram group or supergroup")
+    return str(group_id)
 
 
 def check_access(api: Callable[[str, dict[str, str]], dict[str, Any]], chat_id: str) -> dict[str, str]:
@@ -95,25 +125,25 @@ def main() -> int:
     try:
         if not token:
             raise BotAccessError("TELEGRAM_GROWTH_BOT_TOKEN is not configured")
+        validate_dedicated_bot(token, configured)
         def call(method: str, payload: dict[str, str]) -> dict[str, Any]:
             return request_telegram(token, method, payload)
         if args.create_link is not None:
-            group_info = call("getChat", {"chat_id": chat})
-            group_id = group_info.get("id")
-            if not isinstance(group_id, int) or isinstance(group_id, bool):
-                raise BotAccessError("Telegram did not confirm the numeric group ID")
+            group_id = verify_target_group(call, chat)
             # Open database BEFORE calling Telegram; avoid creating a live link
             # when its local registry is unusable.
             with store_connection(default_db_path(args.root)) as db:
                 link = create_join_request_link(call, chat, args.create_link)
                 try:
-                    register_campaign(db, str(group_id), args.create_link, link)
+                    register_campaign(db, group_id, args.create_link, link)
                 except (sqlite3.Error, ValueError):
                     raise BotAccessError("Telegram link may exist but local registration failed: inspect invite links before retrying") from None
             print(json.dumps({"status": "created_and_registered", "join_request_link": link, "campaign": args.create_link}))
         else:
             check = check_access(call, chat)
-            print(json.dumps({"status": "ready_for_opt_in_links", **check}))
+            group_id = verify_target_group(call, chat)
+            print(json.dumps({"status": "admin_rights_verified_for_group", "group_id": group_id,
+                              "note": "No join event has been observed; dedicated ownership is operator-declared", **check}))
         return 0
     except (BotAccessError, sqlite3.Error, OSError, PermissionError, ValueError) as exc:
         reason = str(exc) if isinstance(exc, BotAccessError) else "Local metrics storage or configuration failed"

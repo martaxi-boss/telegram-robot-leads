@@ -20,7 +20,7 @@ other IPTV posting bot or the Project Leader/Codex Supervisor.
   makes no assumption about the old session schema's exact additional columns.
 - That is **not** evidence that the legacy `main.py` adder can safely start.
   Read-only VPS audit #39160115127 found no running legacy Leads process.
-  Do not start the obsolete PM2 `ecosystem.config.js` unchanged.
+  The currently tracked PM2 `ecosystem.config.js` is the new canonical runtime configuration; the **historical** config and process must not be started.
 - The BotFather token of the unrelated `iptvpn_bot` and the Project Leader
   Telegram Supervisor are **out of scope**. No bot token is needed to verify
   these two Telegram user sessions.
@@ -63,7 +63,7 @@ message, member addition, group scraping or update polling is performed.
 Online calls can still receive network/API errors, which are reported by
 **type only** without revealing private values.
 
-These checks do not start a 24/7 process or certify the old mass-add runtime.
+These checks do not start a 24/7 process or certify the old mass-add runtime. The current production entrypoint is `scripts/safe_runtime.py`, guarded by the new policy and separate deployment checks.
 
 ## Operator-only option: voluntary join-request link, NO BotFather
 

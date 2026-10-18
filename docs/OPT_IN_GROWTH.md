@@ -27,8 +27,7 @@ Some legacy source/configuration files still refer to the historical
 `TELEGRAM-IPTVPN` PM2 process name or `/root/TELEGRAM-IPTVPN` runtime
 checkout. Those are **historical references, not the vault location**.
 No such runtime checkout or running Telegram Leads worker was observed on
-this VPS as of the 2026-10-18 audit. Do not start legacy
-`ecosystem.config.js` unchanged. Safe opt-in metrics files were independently
+this VPS as of the 2026-10-18 audit. Do not start an old archived PM2 configuration. The tracked `ecosystem.config.js` now describes the canonical `telegram-robot-leads` worker, which still requires independent deployment readiness checks. Safe opt-in metrics files were independently
 staged (but **not started**) at `/opt/telegram-leads-optin/`; their runtime
 credentials and Telegram bot administrator permissions remain a separate
 activation check. Do not mistake Telethon API ID/hash for a BotFather bot token.
@@ -75,8 +74,8 @@ existing metrics SQLite database **read-only**, without creating a new one.
 
 The legacy `scripts/telegram-iptvpn-status.sh` filename remains as a
 compatibility alias for the safe canonical status command; it no longer opens
-a missing `users.db` for writing or prints lines from account logs. Historical
-`ecosystem.config.js` remains **inactive legacy configuration**, not the
+a missing `users.db` for writing or prints lines from account logs. Canonical
+`ecosystem.config.js` now **inactive legacy configuration**, not the
 current vault path or a safe production start command.
 
 These tools preserve the existing Telethon/SQLite baseline and **do not deploy, restart,

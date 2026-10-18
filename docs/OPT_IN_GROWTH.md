@@ -34,6 +34,51 @@ credentials and Telegram bot administrator permissions remain a separate
 activation check. Do not mistake Telethon API ID/hash for a BotFather bot token.
 
 
+### Verified live readiness (2026-10-18)
+
+The live [read-only SSH audit](https://github.com/martaxi-boss/VPS/actions/runs/39160115127)
+found the protected canonical vault, four staged opt-in modules and their
+provenance file, an active/enabled offsite-backup timer with a recent recorded
+success, and **no running Telegram Robot Leads or metrics worker**. The separate
+`iptvpn_bot` was **running**. Its existing bot token authenticated successfully,
+and it had group administrator and invitation permissions; **it is not an
+available dedicated metrics token**. Do not start a second `getUpdates` poller
+using it. Nothing in that audit consumed Telegram updates or logged secrets.
+
+The safe metrics modules are staged at `/opt/telegram-leads-optin/`.
+They have no runtime token installed; the existing protected
+`/root/project-secrets/telegram-robot-leads/.env` supplies Telethon API
+credentials and the target group, **not a dedicated BotFather metrics token**.
+Real join-event tracking therefore remains inactive. Creating another worker
+must not be confused with renaming the existing project.
+
+#### Read-only status, and credentials in their existing vault
+
+```bash
+# Run directly from the current repository checkout (or staging scripts).
+bash scripts/telegram-robot-leads-status.sh
+
+# Explicit external credentials path: no token is copied into /opt.
+# This check is expected to BLOCK until a genuinely dedicated token exists.
+python3 /opt/telegram-leads-optin/scripts/growth_tracker.py \
+  --check --root /opt/telegram-leads-optin \
+  --env-file /root/project-secrets/telegram-robot-leads/.env
+```
+
+`--env-file` is supported by both `growth_tracker.py` and
+`optin_join_links.py`. It requires an absolute, canonical path pointing to an
+owner-only regular credentials file under an owner-only directory. Symlinks
+and world/group-readable credentials are rejected. Values are loaded privately
+from the original vault at execution time, **never passed as command arguments,
+logged or copied**. `--stats` does not require credentials and now opens an
+existing metrics SQLite database **read-only**, without creating a new one.
+
+The legacy `scripts/telegram-iptvpn-status.sh` filename remains as a
+compatibility alias for the safe canonical status command; it no longer opens
+a missing `users.db` for writing or prints lines from account logs. Historical
+`ecosystem.config.js` remains **inactive legacy configuration**, not the
+current vault path or a safe production start command.
+
 These tools preserve the existing Telethon/SQLite baseline and **do not deploy, restart,
 modify, or enable the legacy direct-add worker**. They provide a safe way to diagnose
 the existing VPS and prepare legitimate, voluntary entry to the Telegram group.
@@ -192,6 +237,8 @@ subscribe to both `chat_member` and `chat_join_request` update types.
 ### Storage, privacy and recovery
 
 - `growth_metrics.sqlite3` is created with owner-only permissions (0600).
+- Offline `--stats` queries existing metrics SQLite data using a read-only
+  connection and does not initialize or modify the database.
 - It stores campaign names, SHA-256 link digests, group IDs, Telegram update
   identifiers and event categories; no raw usernames, phone numbers, private
   invite URLs or session contents are stored.

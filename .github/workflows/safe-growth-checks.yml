@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "scripts/**"
+      - "main.py"
+      - "requirements.txt"
+      - "ecosystem.config.js"
       - "tests/**"
       - "docs/OPT_IN_GROWTH.md"
       - "ecosystem.growth.example.config.js"
@@ -13,6 +16,9 @@ on:
       - main
     paths:
       - "scripts/**"
+      - "main.py"
+      - "requirements.txt"
+      - "ecosystem.config.js"
       - "tests/**"
       - "docs/OPT_IN_GROWTH.md"
       - "ecosystem.growth.example.config.js"
@@ -30,7 +36,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Syntax validation (including legacy main)
-        run: python -m py_compile main.py scripts/lead_health.py scripts/optin_join_links.py scripts/growth_store.py scripts/growth_tracker.py
+        run: python -m py_compile main.py scripts/lead_health.py scripts/optin_join_links.py scripts/growth_store.py scripts/growth_tracker.py scripts/telethon_sessions.py
       - name: Local tests (no external credentials)
         run: python -m unittest discover -s tests -v
       - name: Canonical and legacy status shells parse safely

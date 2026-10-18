@@ -15,19 +15,16 @@ import stat
 import subprocess
 from typing import Any
 
-PROCESS_NAME = "TELEGRAM-IPTVPN"  # Historical, inactive legacy process name.
+PROCESS_NAME = "telegram-robot-leads"
+LEGACY_PROCESS_NAME = "TELEGRAM-IPTVPN"  # Detection only; never start or restart.
 METRICS_PROCESS_NAME = "TELEGRAM-LEADS-METRICS"
 SAFE_DEFAULTS = {
     "TARGET_GROUP": "@iptvpncode",
-    "MAX_ADDS_PROJECT_PER_DAY": "70",
-    "MIN_ADDS_PER_DAY": "45",
-    "MAX_ADDS_PER_DAY": "80",
-    "TELEGRAM_INVITES_ENABLED": "1",
-    "SCRAPE_ENABLED": "1",
-    "TELEGRAM_ACTIVE_MODE": "0",
+    "TELEGRAM_TZ": "Europe/Lisbon",
+    "TELEGRAM_GROUP_ALLOWLIST": "group_allowlist.txt",
+    "TELEGRAM_APPROVED_USERS": "approved_users.txt",
+    "TELEGRAM_OPERATION_STATE": "/var/lib/telegram-robot-leads/operation-state.json",
 }
-NUMERIC_KEYS = {"MAX_ADDS_PROJECT_PER_DAY", "MIN_ADDS_PER_DAY", "MAX_ADDS_PER_DAY"}
-BOOL_KEYS = {"TELEGRAM_INVITES_ENABLED", "SCRAPE_ENABLED", "TELEGRAM_ACTIVE_MODE"}
 CREDENTIAL_KEYS = ("TELEGRAM_API_ID", "TELEGRAM_API_HASH", "API_ID", "API_HASH", "TELEGRAM_GROWTH_BOT_TOKEN")
 
 
@@ -118,16 +115,11 @@ def read_pm2() -> tuple[list[dict[str, Any]], str | None]:
 
 
 def _safe_value(key: str, raw: str) -> str:
+    # Only the public destination identifier can be safely shown to the operator.
     raw = str(raw).strip()
-    if key in NUMERIC_KEYS:
-        if not raw.isascii() or not raw.isdecimal() or len(raw) > 8:
-            return "INVALID"
-        return raw
-    if key in BOOL_KEYS:
-        return "true" if raw.lower() in {"1", "true", "on", "yes"} else "false" if raw.lower() in {"0", "false", "off", "no"} else "INVALID"
     if key == "TARGET_GROUP":
-        return raw if re.fullmatch(r"@[A-Za-z0-9_]{3,32}|-?[0-9]{5,20}", raw) else "INVALID"
-    return "REDACTED"
+        return raw if re.fullmatch(r"@[A-Za-z][A-Za-z0-9_]{4,31}|-?[0-9]{5,20}", raw) else "INVALID"
+    return "CONFIGURED" if raw else "MISSING"
 
 
 def _db_summary(path: Path) -> dict[str, Any]:
@@ -159,7 +151,6 @@ def inspect(root: Path, pm2_records: list[dict[str, Any]], pm2_error: str | None
     pm2_env = proc.get("pm2_env", {}) if isinstance(proc, dict) else {}
     if not isinstance(pm2_env, dict):
         pm2_env = {}
-    override = str(pm2_env.get("DOTENV_OVERRIDE", "0")).strip().lower() in {"1", "true", "yes", "on"}
     runtime = {
         "found": bool(proc),
         "name": PROCESS_NAME,
@@ -170,6 +161,13 @@ def inspect(root: Path, pm2_records: list[dict[str, Any]], pm2_error: str | None
     }
     if pm2_error:
         runtime["diagnostic"] = pm2_error
+    legacy_proc = next((p for p in pm2_records if p.get("name") == LEGACY_PROCESS_NAME), None)
+    legacy_env = legacy_proc.get("pm2_env", {}) if isinstance(legacy_proc, dict) else {}
+    legacy_runtime = {
+        "found": bool(legacy_proc),
+        "status": str(legacy_env.get("status", "unknown")) if legacy_proc else "not_found",
+        "note": "Historical process: never start or migrate it automatically",
+    }
     metrics_proc = next((p for p in pm2_records if p.get("name") == METRICS_PROCESS_NAME), None)
     metrics_pm2 = metrics_proc.get("pm2_env", {}) if isinstance(metrics_proc, dict) else {}
     metrics_runtime = {
@@ -180,8 +178,10 @@ def inspect(root: Path, pm2_records: list[dict[str, Any]], pm2_error: str | None
     }
     config = {}
     for key, default in SAFE_DEFAULTS.items():
-        if key in private_env and (override or key not in pm2_env):
-            raw, source = private_env[key], ".env"
+        # TARGET_GROUP is read by the canonical session vault loader.
+        if key == "TARGET_GROUP":
+            raw = private_env.get(key, default)
+            source = ".env" if key in private_env else "source_default"
         elif key in pm2_env:
             raw, source = pm2_env[key], "pm2"
         elif key in private_env:
@@ -208,8 +208,14 @@ def inspect(root: Path, pm2_records: list[dict[str, Any]], pm2_error: str | None
         "project": "telegram-robot-leads",
         "source": "read-only local snapshot",
         "runtime": runtime,
+        "legacy_runtime": legacy_runtime,
         "metrics_runtime": metrics_runtime,
         "configuration_candidates": config,
+        "legacy_config_keys_present": sum(1 for key in private_env if (
+            key.startswith("SCRAPE_") or key.startswith("MIN_ADDS_")
+            or key.startswith("MAX_ADDS_")
+            or key in {"TELEGRAM_INVITES_ENABLED", "TELEGRAM_ACTIVE_MODE"}
+        )),
         "credentials": {
             "telegram_api_id_configured": present_keys["TELEGRAM_API_ID"] or present_keys["API_ID"] or sensitive["telegram_api.json"]["present"],
             "telegram_api_hash_configured": present_keys["TELEGRAM_API_HASH"] or present_keys["API_HASH"] or sensitive["telegram_api.json"]["present"],
@@ -218,7 +224,7 @@ def inspect(root: Path, pm2_records: list[dict[str, Any]], pm2_error: str | None
         },
         "files": sensitive,
         "accounts": counts,
-        "database": _db_summary(root / "users.db"),
+        "legacy_database_read_only": _db_summary(root / "users.db"),
     }
 
 

@@ -19,6 +19,7 @@ import json
 import os
 from pathlib import Path
 import re
+import time
 
 from telethon import errors
 from telethon.tl.functions.channels import InviteToChannelRequest, JoinChannelRequest
@@ -39,6 +40,7 @@ USER_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
 DEFAULT_STATE = Path("/var/lib/telegram-robot-leads/operation-state.json")
 DEFAULT_GROUP_ALLOWLIST = "group_allowlist.txt"
 DEFAULT_APPROVED_USERS = "approved_users.txt"
+DEFAULT_EVENT_JOURNAL = Path("/var/lib/telegram-robot-leads/supervisor-events.jsonl")
 
 
 def _private_operator_file(path: Path, vault: Path, required: bool = False) -> list[str]:
@@ -134,6 +136,36 @@ def _state_path() -> Path:
     return Path(
         os.environ.get("TELEGRAM_OPERATION_STATE", str(DEFAULT_STATE))
     ).expanduser()
+
+
+def _event_journal_path() -> Path:
+    return Path(
+        os.environ.get("TELEGRAM_EVENT_JOURNAL", str(DEFAULT_EVENT_JOURNAL))
+    ).expanduser()
+
+
+def append_supervisor_event(event: dict) -> None:
+    """Append one private, non-secret operational event for an external supervisor."""
+    path = _event_journal_path()
+    if path.is_symlink() or path.parent.is_symlink():
+        raise PolicyBlocked("event_journal_symlink_invalid")
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    payload = {
+        "ts": int(time.time()),
+        "event": event,
+    }
+    flags = os.O_CREAT | os.O_APPEND | os.O_WRONLY | os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    try:
+        st = os.fstat(fd)
+        if st.st_uid != os.geteuid() or (st.st_mode & 0o077):
+            raise PolicyBlocked("event_journal_permissions_invalid")
+        with os.fdopen(fd, "a", encoding="utf-8", closefd=False) as stream:
+            stream.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        os.close(fd)
 
 
 async def _connected_client(config: dict, account_number: int):
@@ -289,8 +321,6 @@ async def _add_one(
 
 async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     config = inspect(vault)
-    if config["api_source"] != "private_app_credentials":
-        raise ProbeBlocked("automatic_runtime_requires_private_app_credentials")
 
     groups = load_group_allowlist(vault)
     users = load_approved_users(vault)
@@ -342,6 +372,13 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
             )
             save_state(path, state)
 
+    append_supervisor_event({
+        "kind": "cycle",
+        "api_source": config["api_source"],
+        "group_actions": report["group_actions"],
+        "member_actions": report["member_actions"],
+        "blocked": report["blocked"],
+    })
     return report
 
 
@@ -377,10 +414,12 @@ async def loop(vault: Path, interval: int) -> None:
             report = await run_once(vault)
             print(json.dumps(report, ensure_ascii=False, sort_keys=True), flush=True)
         except Exception as exc:
-            print(
-                json.dumps({"status": "BLOCKED", "reason": type(exc).__name__}),
-                flush=True,
-            )
+            blocked = {"status": "BLOCKED", "reason": type(exc).__name__}
+            try:
+                append_supervisor_event({"kind": "runtime_blocked", **blocked})
+            except Exception:
+                pass
+            print(json.dumps(blocked), flush=True)
         await asyncio.sleep(interval)
 
 

@@ -1,6 +1,21 @@
 # Current Project State
 
-Updated: 2026-10-18
+Updated: 2026-10-19 (feature branch; production status remains dated 2026-10-18)
+
+## New capability under test (not yet proven in production)
+
+Public niche-group discovery has been added to the existing safe PM2 runtime.
+It queries only the Telegram public-chat search API and records public group
+usernames/titles, **not members**. The daily runner is enabled in the new
+`ecosystem.config.js` and shares both existing project accounts without
+creating a new worker. Public voluntary joining via the target group's
+public URL requires no additional BotFather token. See
+`docs/PUBLIC_GROUP_DISCOVERY.md`.
+
+**Deployment note:** the already prepared 2026-10-20 activation is pinned to
+source commit `5e18982`. Merging this feature is not evidence that the VPS
+was upgraded: the new commit must be staged and independently verified.
+Consent, privacy and Telegram restriction guards remain operative.
 
 ## Canonical runtime update (2026-10-18)
 

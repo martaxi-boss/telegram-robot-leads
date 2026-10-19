@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Telegram Robot Leads safe runtime.
 
-This runtime intentionally contains no group discovery, participant scraping,
-anti-detection/human-mimic behaviour, or unsolicited bulk-add pipeline.
-It only processes operator-managed allowlists and explicitly approved users.
+This runtime can discover public group handles by topic (not participants).
+It never scrapes member identities, imitates people or bulk-adds users.
+Joining groups and adding members require explicit authorization.
 """
 
 import sys

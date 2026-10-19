@@ -5,8 +5,9 @@ Allowed inputs:
 - group_allowlist.txt: public groups explicitly approved by the operator.
 - approved_users.txt: users explicitly approved/consented for addition to TARGET_GROUP.
 
-The module does not discover groups, scrape members, enumerate third-party
-participants, mimic human behaviour, or retry abuse/rate-limit signals.
+Optional daily public group *discovery* uses Telegram public search only.
+It never collects participants or auto-enrolls anyone. Group joins and
+direct additions remain limited to explicitly authorized entries.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from operation_policy import (
     save_state,
 )
 from telethon_sessions import DEFAULT_VAULT, ProbeBlocked, inspect, make_memory_client
+from public_group_discovery import DiscoveryBlocked, discover_daily
 
 GROUP_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
 USER_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
@@ -328,6 +330,26 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     state = load_state(path, os.environ.get("TELEGRAM_TZ", "Europe/Lisbon"))
     report = {"group_actions": [], "member_actions": [], "blocked": []}
 
+    if os.environ.get("TELEGRAM_PUBLIC_DISCOVERY_ENABLED", "0").lower() in {
+        "1", "true", "yes", "on"
+    }:
+        try:
+            report["public_discovery"] = await discover_daily(config, vault)
+        except DiscoveryBlocked as exc:
+            reason = str(exc)
+            report["public_discovery"] = {"status": "BLOCKED", "reason": reason}
+            if reason == "telegram_search_rate_or_account_restriction":
+                # This is a real Telegram hard-stop for account 1, not a
+                # configuration inconvenience to retry using account 2.
+                block_account(state, 1, reason)
+                save_state(path, state)
+        except Exception as exc:
+            # Discovery errors must remain visible without blocking unrelated
+            # authorized work or divulging Telegram credentials in logs.
+            report["public_discovery"] = {
+                "status": "ERROR", "reason": type(exc).__name__
+            }
+
     for group in groups:
         account = assigned_group_account(state, group)
         try:
@@ -378,6 +400,7 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
         "group_actions": report["group_actions"],
         "member_actions": report["member_actions"],
         "blocked": report["blocked"],
+        "public_discovery": report.get("public_discovery"),
     })
     return report
 

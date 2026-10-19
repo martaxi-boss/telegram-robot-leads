@@ -278,6 +278,43 @@ class SafeRuntimeInputTests(unittest.TestCase):
                     )
         asyncio.run(check())
 
+    def test_existing_verified_api_source_is_not_artificially_blocked(self):
+        async def check():
+            state = policy.empty_state()
+            with tempfile.TemporaryDirectory() as root:
+                vault = Path(root)
+                journal = Path(root) / "events.jsonl"
+                with patch.object(
+                    safe_runtime,
+                    "inspect",
+                    return_value={"api_source": "published_android_fallback"},
+                ), patch.object(
+                    safe_runtime, "load_group_allowlist", return_value=[]
+                ), patch.object(
+                    safe_runtime, "load_approved_users", return_value=[]
+                ), patch.object(
+                    safe_runtime, "_state_path", return_value=Path(root) / "state.json"
+                ), patch.object(
+                    safe_runtime, "_event_journal_path", return_value=journal
+                ):
+                    result = await safe_runtime._run_once_unlocked(vault)
+                self.assertEqual(result["group_actions"], [])
+                self.assertEqual(result["member_actions"], [])
+                event = json.loads(journal.read_text(encoding="utf-8").splitlines()[0])
+                self.assertEqual(event["event"]["api_source"], "published_android_fallback")
+                self.assertEqual(event["event"]["kind"], "cycle")
+        asyncio.run(check())
+
+    def test_supervisor_event_journal_is_private_and_append_only(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "events.jsonl"
+            with patch.object(safe_runtime, "_event_journal_path", return_value=path):
+                safe_runtime.append_supervisor_event({"kind": "one"})
+                safe_runtime.append_supervisor_event({"kind": "two"})
+            rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([row["event"]["kind"] for row in rows], ["one", "two"])
+            self.assertEqual(path.stat().st_mode & 0o077, 0)
+
     def test_second_instance_cannot_enter_runtime(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "state.json"

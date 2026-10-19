@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import fcntl
 import json
 import os
@@ -75,7 +75,7 @@ def read_consents(vault: Path, source: str, *, today: date | None = None) -> lis
     raw = _private_file(vault / CONSENT_FILENAME, vault, MAX_FILE_BYTES)
     if len(raw.encode("utf-8")) > MAX_FILE_BYTES:
         raise TransferBlocked("consent_file_too_large")
-    now = today or date.today()
+    now = today or datetime.now(ZoneInfo("Europe/Lisbon")).date()
     selected: list[dict] = []
     seen: set[str] = set()
     valid_rows = 0

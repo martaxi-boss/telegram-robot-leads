@@ -235,7 +235,9 @@ def build_report(
         and event.get("event_kind") == "cycle"
         and event.get("public_discovery_status") == "PUBLIC_DISCOVERY_COMPLETE"
         and catalog.get("status") == "CATALOG_PRESENT"
-        and operation.get("status") == "READABLE"
+        # No state file is normal when discovery ran but no groups/users were
+        # authorized for side-effecting work; never certify corrupt state.
+        and operation.get("status") in {"READABLE", "NOT_CREATED"}
         and event.get("recorded_at_epoch", -1) >= source.get("installed_at_epoch", float("inf"))
     )
     if verified_live:

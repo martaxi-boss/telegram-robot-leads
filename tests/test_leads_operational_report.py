@@ -97,6 +97,16 @@ class OperationalReportTests(unittest.TestCase):
             self.assertNotIn(secret, output)
         self.assertNotIn("auth_key", output)
 
+    def test_public_search_can_work_without_any_approved_users_or_state(self):
+        # The runtime only writes action state when it attempts authorized
+        # joins/adds; an empty queue must not invalidate real search evidence.
+        self.state.unlink()
+        result = self.build()
+        self.assertEqual(result["operation_state"]["status"], "NOT_CREATED")
+        self.assertEqual(result["status"], "LIVE_PUBLIC_DISCOVERY_OBSERVED")
+        self.assertEqual(result["supervisor"]["public_discovery_status"],
+                         "PUBLIC_DISCOVERY_COMPLETE")
+
     def test_offline_does_not_claim_online_health(self):
         result = self.build(pm2_records=None)
         self.assertEqual(result["status"], "OFFLINE_ONLY")

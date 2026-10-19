@@ -78,7 +78,7 @@ class PublicDiscoveryTests(unittest.TestCase):
             discovery.select_keywords(self.vault, "@randomgroup", [])
 
     def test_malformed_keywords_and_private_link_fail_closed(self):
-        for terms in (["aa"], ["bad\nkeyword"], ["x" * 65], ["valid"] * 7):
+        for terms in (["aa"], ["bad\nkeyword"], ["x" * 65], [f"valid{i}" for i in range(7)]):
             with self.subTest(terms=terms):
                 with self.assertRaises(discovery.DiscoveryBlocked):
                     discovery.select_keywords(self.vault, "@iptvpncode", terms)
@@ -150,6 +150,22 @@ class PublicDiscoveryTests(unittest.TestCase):
         self.assertEqual(result_two["new_public_groups"], 0)
         self.assertEqual(discovery.read_catalog(self.path)["groups"]["@publiciptv"]["first_seen_at"],
                          first_seen)
+
+    def test_daily_search_is_idempotent_even_if_worker_restarts(self):
+        first = FakeClient([SimpleNamespace(chats=[chat("PublicIPTV")]),
+                            SimpleNamespace(chats=[])])
+        result = asyncio.run(discovery.discover_daily(
+            self.config, self.vault, self.path,
+            client_factory=lambda *a: first, delay_seconds=0, day="2026-10-19"))
+        self.assertEqual(result["status"], "PUBLIC_DISCOVERY_COMPLETE")
+        self.assertEqual(len(first.calls), 2)
+        second = FakeClient([])
+        skipped = asyncio.run(discovery.discover_daily(
+            self.config, self.vault, self.path,
+            client_factory=lambda *a: second, delay_seconds=0, day="2026-10-19"))
+        self.assertEqual(skipped["status"], "PUBLIC_DISCOVERY_ALREADY_ATTEMPTED_TODAY")
+        self.assertEqual(second.calls, [])
+        self.assertFalse(second.connected)
 
     def test_existing_account_authorization_required(self):
         fake = FakeClient(authorized=False)

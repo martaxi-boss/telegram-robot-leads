@@ -46,6 +46,7 @@ jobs:
           scripts/telethon_sessions.py
           scripts/operation_policy.py
           scripts/safe_runtime.py
+          scripts/public_group_discovery.py
       - name: Local tests
         run: python -m unittest discover -s tests -v
       - name: Status shells parse safely

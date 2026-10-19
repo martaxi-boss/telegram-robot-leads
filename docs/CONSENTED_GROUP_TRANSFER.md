@@ -79,6 +79,13 @@ a processar sob a política existente.
 - Um operador mal-intencionado poderia escrever falsamente CONSENTED.
   O software não pode provar por si só a vontade de outra pessoa; o
   consentimento tem de existir e ser auditável fora da ferramenta.
+- Uma resposta técnica sem exceção **não comprova, por si só, uma adição**.
+  O motor verifica `messages.InvitedUsers.missing_invitees` e regista os
+  utilizadores que não puderam ser convidados como `not_addable`,
+  sem contar novas adesões ou repetir a operação. Também reconhece
+  `USER_NOT_MUTUAL_CONTACT` como recusa explícita.
+  Se o resultado não tiver formato verificável, mantém a operação
+  pendente de reconciliação manual; nunca assume sucesso.
 - A API pode negar visibilidade ou impedir adições mesmo após os checks.
   O processo para em erros não previstos, sem trocar para a segunda conta
   para escapar a restrições.

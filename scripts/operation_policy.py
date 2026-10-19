@@ -19,6 +19,7 @@ MAX_MEMBER_ADDS_PROJECT_DAY = 20
 MIN_INTERVAL_SECONDS = 10 * 60
 MEMBER_ACTIVITY_START_HOUR = 8
 MEMBER_ACTIVITY_END_HOUR = 22
+ACCOUNT_TIME_OFFSETS_MINUTES = {1: 0, 2: 42}
 DEFAULT_TZ = "Europe/Lisbon"
 
 
@@ -126,6 +127,38 @@ def project_total(state: dict, field: str) -> int:
     return sum(int(state["accounts"][key].get(field, 0)) for key in ("1", "2"))
 
 
+def member_time_budget(account_number: int, now: float | None = None) -> int:
+    """Return how many member slots are available by this point in the day.
+
+    The 14-hour window is divided evenly across the ten daily positions.
+    Account 2 is offset by half a slot so both accounts are not due together.
+    """
+    if account_number not in (1, 2):
+        raise PolicyBlocked("account_invalid")
+    current = time.time() if now is None else now
+    local = datetime.fromtimestamp(current, ZoneInfo(DEFAULT_TZ))
+    start = local.replace(
+        hour=MEMBER_ACTIVITY_START_HOUR, minute=0, second=0, microsecond=0
+    )
+    end = local.replace(
+        hour=MEMBER_ACTIVITY_END_HOUR, minute=0, second=0, microsecond=0
+    )
+    if local < start:
+        return 0
+    if local >= end:
+        return MAX_MEMBER_ADDS_PER_ACCOUNT_DAY
+    window_seconds = int((end - start).total_seconds())
+    slot_seconds = window_seconds / MAX_MEMBER_ADDS_PER_ACCOUNT_DAY
+    offset_seconds = ACCOUNT_TIME_OFFSETS_MINUTES[account_number] * 60
+    elapsed = (local - start).total_seconds() - offset_seconds
+    if elapsed < 0:
+        return 0
+    return min(
+        MAX_MEMBER_ADDS_PER_ACCOUNT_DAY,
+        int(elapsed // slot_seconds) + 1,
+    )
+
+
 def check_action(state: dict, account_number: int, action_type: str, now: float | None = None) -> None:
     key = str(account_number)
     if key not in ("1", "2"):
@@ -154,6 +187,10 @@ def check_action(state: dict, account_number: int, action_type: str, now: float 
         local_hour = datetime.fromtimestamp(current, ZoneInfo(DEFAULT_TZ)).hour
         if not MEMBER_ACTIVITY_START_HOUR <= local_hour < MEMBER_ACTIVITY_END_HOUR:
             raise PolicyDeferred("member_activity_window_08_22_portugal")
+        if int(account.get("member_adds", 0)) >= member_time_budget(
+            account_number, now=current
+        ):
+            raise PolicyDeferred(f"account_{account_number}_member_day_distribution")
     last = float(account.get("last_action") or 0)
     if last and current - last < MIN_INTERVAL_SECONDS:
         raise PolicyDeferred(f"account_{account_number}_interval")

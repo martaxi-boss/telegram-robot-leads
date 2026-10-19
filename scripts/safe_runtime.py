@@ -108,6 +108,28 @@ def assigned_account(value: str) -> int:
     return (hashlib.sha256(value.lower().encode("utf-8")).digest()[0] % 2) + 1
 
 
+def assigned_group_account(state: dict, group: str) -> int:
+    """Allocate a new group to the account with spare daily join capacity.
+
+    Preserve historical assignments for groups already joined or pending:
+    rebalancing must never retry an ambiguous Telegram-side operation.
+    """
+    canonical = group.lower()
+    for key in ("joined_groups", "pending_group_actions"):
+        record = state.get(key, {}).get(canonical)
+        if isinstance(record, dict) and record.get("account") in (1, 2):
+            return record["account"]
+    counts = [
+        int(state["accounts"][str(number)]["group_joins"])
+        for number in (1, 2)
+    ]
+    if counts[0] < counts[1]:
+        return 1
+    if counts[1] < counts[0]:
+        return 2
+    return assigned_account(group)
+
+
 def _state_path() -> Path:
     return Path(
         os.environ.get("TELEGRAM_OPERATION_STATE", str(DEFAULT_STATE))
@@ -239,7 +261,7 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     report = {"group_actions": [], "member_actions": [], "blocked": []}
 
     for group in groups:
-        account = assigned_account(group)
+        account = assigned_group_account(state, group)
         try:
             status = await _join_one(config, state, group, account)
             report["group_actions"].append(

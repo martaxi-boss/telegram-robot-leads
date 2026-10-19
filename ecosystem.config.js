@@ -24,6 +24,8 @@ module.exports = {
         TELEGRAM_TZ: "Europe/Lisbon",
         TELEGRAM_GROUP_ALLOWLIST: "group_allowlist.txt",
         TELEGRAM_APPROVED_USERS: "approved_users.txt",
+        TELEGRAM_EVENT_JOURNAL:
+          "/var/lib/telegram-robot-leads/supervisor-events.jsonl",
       },
     },
   ],

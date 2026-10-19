@@ -56,6 +56,28 @@ class OperationPolicyTests(unittest.TestCase):
             now=12 * 3600,
         )
 
+    def test_member_capacity_is_spread_across_the_day(self):
+        zone = ZoneInfo("Europe/Lisbon")
+        def ts(h, m):
+            return datetime(2026, 1, 1, h, m, tzinfo=zone).timestamp()
+
+        self.assertEqual(policy.member_time_budget(1, now=ts(7, 59)), 0)
+        self.assertEqual(policy.member_time_budget(1, now=ts(8, 0)), 1)
+        self.assertEqual(policy.member_time_budget(2, now=ts(8, 0)), 0)
+        self.assertEqual(policy.member_time_budget(2, now=ts(8, 42)), 1)
+        self.assertLess(policy.member_time_budget(1, now=ts(12, 0)), 10)
+        self.assertLess(policy.member_time_budget(2, now=ts(12, 0)), 10)
+        self.assertEqual(policy.member_time_budget(1, now=ts(22, 0)), 10)
+        self.assertEqual(policy.member_time_budget(2, now=ts(22, 0)), 10)
+
+    def test_second_add_is_deferred_until_next_daily_position(self):
+        zone = ZoneInfo("Europe/Lisbon")
+        state = policy.empty_state()
+        state["accounts"]["1"]["member_adds"] = 1
+        at_open = datetime(2026, 1, 1, 8, 20, tzinfo=zone).timestamp()
+        with self.assertRaisesRegex(policy.PolicyDeferred, "member_day_distribution"):
+            policy.check_action(state, 1, "member_add", now=at_open)
+
     def test_member_add_only_within_portugal_daytime(self):
         state = policy.empty_state()
         before = datetime(2026, 1, 1, 7, 59, tzinfo=ZoneInfo("Europe/Lisbon"))

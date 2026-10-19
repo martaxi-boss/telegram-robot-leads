@@ -230,6 +230,23 @@ async def _join_one(
             await client.disconnect()
 
 
+def _record_not_addable(
+    state: dict, username: str, user_id: str, account_number: int, reason: str
+) -> str:
+    """Record a Telegram-confirmed denial; never retry it or count a success."""
+    state["approved_users_done"][username] = {
+        "account": account_number,
+        "status": "not_addable",
+        "reason": reason,
+    }
+    state["approved_user_ids_done"][user_id] = {
+        "account": account_number, "status": "not_addable"
+    }
+    state["pending_member_actions"].pop(username, None)
+    state["pending_member_ids"].pop(user_id, None)
+    return "not_addable"
+
+
 async def _add_one(
     config: dict, state: dict, username: str, account_number: int
 ) -> str:
@@ -269,9 +286,27 @@ async def _add_one(
         }
         save_state(_state_path(), state)
         try:
-            await asyncio.wait_for(
+            outcome = await asyncio.wait_for(
                 client(InviteToChannelRequest(target, [user])), timeout=25
             )
+            # Telegram can return 200 OK while *not* adding the person.
+            # messages.InvitedUsers.missing_invitees explicitly lists those
+            # that could not be invited (e.g. due to privacy settings).
+            # We only request one approved user at a time.
+            missing = getattr(outcome, "missing_invitees", None)
+            if not isinstance(missing, (list, tuple)):
+                # An older/unrecognised response cannot prove success.
+                # Keep the pre-request pending record for manual review.
+                raise PolicyBlocked("invite_result_unverified_manual_reconciliation_required")
+            if missing:
+                if (len(missing) != 1
+                        or type(getattr(missing[0], "user_id", None)) is not int
+                        or missing[0].user_id != numeric_id):
+                    raise PolicyBlocked("invite_result_identity_mismatch_manual_reconciliation_required")
+                return _record_not_addable(
+                    state, canonical, stable_id, account_number,
+                    "TelegramMissingInvitee",
+                )
             record_success(state, account_number, "member_add")
             state["approved_users_done"][canonical] = {
                 "account": account_number,
@@ -296,19 +331,14 @@ async def _add_one(
             state["pending_member_actions"].pop(canonical, None)
             state["pending_member_ids"].pop(stable_id, None)
             return "already_member"
-        except (errors.UserPrivacyRestrictedError, errors.UserChannelsTooMuchError) as exc:
-            state["approved_users_done"][canonical] = {
-                "account": account_number,
-                "status": "not_addable",
-                "reason": type(exc).__name__,
-            }
-            state["approved_user_ids_done"][stable_id] = {
-                "account": account_number,
-                "status": "not_addable",
-            }
-            state["pending_member_actions"].pop(canonical, None)
-            state["pending_member_ids"].pop(stable_id, None)
-            return "not_addable"
+        except (
+            errors.UserPrivacyRestrictedError,
+            errors.UserChannelsTooMuchError,
+            errors.UserNotMutualContactError,
+        ) as exc:
+            return _record_not_addable(
+                state, canonical, stable_id, account_number, type(exc).__name__
+            )
     except Exception as exc:
         if _is_hard_stop(exc):
             reason = type(exc).__name__

@@ -209,7 +209,30 @@ async def _add_one(
     try:
         target = await asyncio.wait_for(client.get_entity(config["group"]), timeout=20)
         user = await asyncio.wait_for(client.get_input_entity(username), timeout=20)
-        state["pending_member_actions"][canonical] = {"account": account_number}
+        numeric_id = getattr(user, "user_id", None)
+        if type(numeric_id) is not int or numeric_id <= 0:
+            raise ProbeBlocked("member_stable_identity_unavailable")
+        stable_id = str(numeric_id)
+        if stable_id in state["approved_user_ids_done"]:
+            state["approved_users_done"][canonical] = {
+                "account": account_number,
+                "status": "already_recorded_identity",
+            }
+            return "already_recorded_identity"
+        # Old ambiguous attempts without IDs cannot be deduplicated safely.
+        if any(
+            not isinstance(entry, dict) or type(entry.get("user_id")) is not int
+            for entry in state["pending_member_actions"].values()
+        ):
+            raise PolicyBlocked("legacy_pending_member_identity_needs_review")
+        if stable_id in state["pending_member_ids"]:
+            raise PolicyBlocked("member_identity_outcome_unknown_manual_reconciliation_required")
+        state["pending_member_actions"][canonical] = {
+            "account": account_number, "user_id": numeric_id
+        }
+        state["pending_member_ids"][stable_id] = {
+            "account": account_number, "username": canonical
+        }
         save_state(_state_path(), state)
         try:
             await asyncio.wait_for(
@@ -220,14 +243,24 @@ async def _add_one(
                 "account": account_number,
                 "status": "added",
             }
+            state["approved_user_ids_done"][stable_id] = {
+                "account": account_number,
+                "status": "added",
+            }
             state["pending_member_actions"].pop(canonical, None)
+            state["pending_member_ids"].pop(stable_id, None)
             return "added"
         except errors.UserAlreadyParticipantError:
             state["approved_users_done"][canonical] = {
                 "account": account_number,
                 "status": "already_member",
             }
+            state["approved_user_ids_done"][stable_id] = {
+                "account": account_number,
+                "status": "already_member",
+            }
             state["pending_member_actions"].pop(canonical, None)
+            state["pending_member_ids"].pop(stable_id, None)
             return "already_member"
         except (errors.UserPrivacyRestrictedError, errors.UserChannelsTooMuchError) as exc:
             state["approved_users_done"][canonical] = {
@@ -235,7 +268,12 @@ async def _add_one(
                 "status": "not_addable",
                 "reason": type(exc).__name__,
             }
+            state["approved_user_ids_done"][stable_id] = {
+                "account": account_number,
+                "status": "not_addable",
+            }
             state["pending_member_actions"].pop(canonical, None)
+            state["pending_member_ids"].pop(stable_id, None)
             return "not_addable"
     except Exception as exc:
         if _is_hard_stop(exc):

@@ -17,6 +17,8 @@ MAX_GROUP_JOINS_PROJECT_DAY = 2
 MAX_MEMBER_ADDS_PER_ACCOUNT_DAY = 10
 MAX_MEMBER_ADDS_PROJECT_DAY = 20
 MIN_INTERVAL_SECONDS = 10 * 60
+MEMBER_ACTIVITY_START_HOUR = 8
+MEMBER_ACTIVITY_END_HOUR = 22
 DEFAULT_TZ = "Europe/Lisbon"
 
 
@@ -48,6 +50,8 @@ def empty_state(tz_name: str = DEFAULT_TZ) -> dict:
         "accounts": {"1": _new_account(), "2": _new_account()},
         "joined_groups": {},
         "approved_users_done": {},
+        "approved_user_ids_done": {},
+        "pending_member_ids": {},
         "pending_group_actions": {},
         "pending_member_actions": {},
     }
@@ -65,8 +69,8 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
         raise PolicyBlocked("state_unreadable") from exc
     if not isinstance(data, dict):
         raise PolicyBlocked("state_invalid")
-    for key in ("joined_groups", "approved_users_done",
-                "pending_group_actions", "pending_member_actions"):
+    for key in ("joined_groups", "approved_users_done", "approved_user_ids_done",
+                "pending_group_actions", "pending_member_actions", "pending_member_ids"):
         if key not in data:
             data[key] = {}
         if not isinstance(data[key], dict):
@@ -90,8 +94,8 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
         # Keep pending remote outcomes and platform hard stops across midnight.
         previous = data
         data = empty_state(tz_name)
-        for key in ("joined_groups", "approved_users_done",
-                    "pending_group_actions", "pending_member_actions"):
+        for key in ("joined_groups", "approved_users_done", "approved_user_ids_done",
+                    "pending_group_actions", "pending_member_actions", "pending_member_ids"):
             data[key] = previous[key]
         for key in ("1", "2"):
             prior = previous["accounts"][key]
@@ -146,6 +150,10 @@ def check_action(state: dict, account_number: int, action_type: str, now: float 
         raise PolicyBlocked("action_type_invalid")
 
     current = time.time() if now is None else now
+    if action_type == "member_add":
+        local_hour = datetime.fromtimestamp(current, ZoneInfo(DEFAULT_TZ)).hour
+        if not MEMBER_ACTIVITY_START_HOUR <= local_hour < MEMBER_ACTIVITY_END_HOUR:
+            raise PolicyDeferred("member_activity_window_08_22_portugal")
     last = float(account.get("last_action") or 0)
     if last and current - last < MIN_INTERVAL_SECONDS:
         raise PolicyDeferred(f"account_{account_number}_interval")

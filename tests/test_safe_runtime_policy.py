@@ -155,6 +155,38 @@ class SafeRuntimeInputTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertIn(first, (1, 2))
 
+    def test_new_group_uses_account_with_available_daily_slot(self):
+        state = policy.empty_state()
+        state["accounts"]["1"]["group_joins"] = 1
+        self.assertEqual(
+            safe_runtime.assigned_group_account(state, "@freshgroup"), 2
+        )
+        state["accounts"]["1"]["group_joins"] = 0
+        state["accounts"]["2"]["group_joins"] = 1
+        self.assertEqual(
+            safe_runtime.assigned_group_account(state, "@freshgroup"), 1
+        )
+
+    def test_group_pending_or_joined_account_is_not_reassigned(self):
+        state = policy.empty_state()
+        state["accounts"]["1"]["group_joins"] = 1
+        state["pending_group_actions"]["@freshgroup"] = {"account": 1}
+        self.assertEqual(
+            safe_runtime.assigned_group_account(state, "@FRESHGROUP"), 1
+        )
+        del state["pending_group_actions"]["@freshgroup"]
+        state["joined_groups"]["@freshgroup"] = {"account": 1}
+        self.assertEqual(
+            safe_runtime.assigned_group_account(state, "@freshgroup"), 1
+        )
+
+    def test_equal_available_daily_slots_keep_stable_tiebreak(self):
+        state = policy.empty_state()
+        self.assertEqual(
+            safe_runtime.assigned_group_account(state, "@freshgroup"),
+            safe_runtime.assigned_account("@freshgroup"),
+        )
+
     def test_second_instance_cannot_enter_runtime(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "state.json"

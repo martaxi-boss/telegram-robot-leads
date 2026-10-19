@@ -15,6 +15,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import re
 import stat
 import tempfile
@@ -251,6 +252,29 @@ async def discover_once(config: dict, keywords: list[str], catalog_path: Path = 
         "users_contacted": 0,
         "members_added": 0,
     }
+
+
+
+async def discover_daily(config: dict, vault: Path, catalog_path: Path = DEFAULT_CATALOG,
+                         client_factory=None, delay_seconds: float = 3,
+                         day: str | None = None) -> dict:
+    """At most one discovery attempt per Portugal calendar day in the existing worker.
+
+    Persist the attempt *before* contacting Telegram so restarts cannot create
+    repeated automatic searches after timeouts or anti-abuse signals.
+    """
+    keywords = select_keywords(vault, config["group"], [])
+    stamp_day = day or datetime.now(ZoneInfo("Europe/Lisbon")).date().isoformat()
+    with catalog_lock(catalog_path):
+        catalog = read_catalog(catalog_path)
+        if catalog.get("last_attempt_day") == stamp_day:
+            return {"status": "PUBLIC_DISCOVERY_ALREADY_ATTEMPTED_TODAY",
+                    "queries": 0, "new_public_groups": 0}
+        catalog["last_attempt_day"] = stamp_day
+        write_catalog(catalog_path, catalog)
+    return await discover_once(config, keywords, catalog_path,
+                               client_factory=client_factory,
+                               delay_seconds=delay_seconds)
 
 
 def main() -> int:

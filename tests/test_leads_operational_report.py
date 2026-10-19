@@ -46,6 +46,7 @@ class OperationalReportTests(unittest.TestCase):
         state["pending_member_actions"]["@sensitive_person"] = {"status": "pending"}
         save_state(self.state, state)
         self.now = 1792420000.0
+        os.utime(self.marker, (self.now - 120, self.now - 120))
         self.events.write_text(json.dumps({
             "ts": int(self.now) - 20,
             "event": {
@@ -112,6 +113,11 @@ class OperationalReportTests(unittest.TestCase):
         self.assertEqual(wrong["source"]["matches_expected"], False)
         self.assertEqual(wrong["status"], "PM2_ONLINE_DISCOVERY_NOT_VERIFIED")
 
+    def test_event_before_current_deployment_is_not_accepted(self):
+        os.utime(self.marker, (self.now + 1, self.now + 1))
+        result = self.build()
+        self.assertEqual(result["status"], "PM2_ONLINE_DISCOVERY_NOT_VERIFIED")
+
     def test_unverified_vault_never_claims_live(self):
         with patch.object(report, "inspect",
                           side_effect=report.ProbeBlocked("missing_credentials")):
@@ -139,7 +145,7 @@ class OperationalReportTests(unittest.TestCase):
         self.state.chmod(0o600)
         result = self.build()
         self.assertEqual(result["operation_state"]["status"], "BLOCKED")
-        self.assertNotEqual(result["status"], "NOT_LIVE_VERIFIED")
+        self.assertEqual(result["status"], "PM2_ONLINE_DISCOVERY_NOT_VERIFIED")
 
     def test_symlink_and_insecure_journal_are_refused(self):
         self.events.chmod(0o644)

@@ -69,6 +69,7 @@ def _source(checkout: Path, expected_sha: str | None) -> dict[str, Any]:
             raise ValueError("invalid_sha_marker")
         result["verified"] = True
         result["source_sha"] = value
+        result["installed_at_epoch"] = int(marker.stat().st_mtime)
         if expected_sha is not None:
             result["matches_expected"] = value == expected_sha
     except (OSError, ValueError, UnicodeError) as exc:
@@ -110,7 +111,6 @@ def _discovery(path: Path) -> dict[str, Any]:
             "public_groups": len(data["groups"]),
             "last_attempt_day": data.get("last_attempt_day"),
             "last_scan_at": data.get("last_scan_at"),
-            "contains_member_identities": False,
         }
     except (DiscoveryBlocked, OSError, ValueError) as exc:
         return {"status": "BLOCKED", "reason": _redacted_reason(str(exc))}
@@ -168,6 +168,7 @@ def _events(path: Path, now: float) -> dict[str, Any]:
                 "status": "RECENT" if age <= RECENT_CYCLE_SECONDS else "STALE",
                 "event_kind": kind,
                 "age_seconds": age,
+                "recorded_at_epoch": int(timestamp),
             }
             if kind == "cycle":
                 discovery = payload.get("public_discovery")
@@ -234,6 +235,8 @@ def build_report(
         and event.get("event_kind") == "cycle"
         and event.get("public_discovery_status") == "PUBLIC_DISCOVERY_COMPLETE"
         and catalog.get("status") == "CATALOG_PRESENT"
+        and operation.get("status") == "READABLE"
+        and event.get("recorded_at_epoch", -1) >= source.get("installed_at_epoch", float("inf"))
     )
     if verified_live:
         result = "LIVE_PUBLIC_DISCOVERY_OBSERVED"

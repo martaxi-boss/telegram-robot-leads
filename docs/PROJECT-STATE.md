@@ -1,5 +1,21 @@
 # Current Project State
 
+## Operational closure additions (2026-10-19, subject to PR CI and VPS staging)
+
+Public group discovery is now accompanied by a separate **operator review**
+CLI that can add *one explicitly confirmed, previously discovered public group*
+to the existing private allowlist without contacting Telegram. An independent
+read-only, redacted operational report verifies exact installed SHA, existing
+offline sessions, PM2 state, public discovery catalog, account restrictions,
+and a recent completed Supervisor event **after source installation**. It does
+not claim that green CI means online Telegram success.
+
+See docs/OPERATIONS_AND_REVIEW.md. No third-party member scraping, unsolicited
+mass additions, BotFather token sharing, or anti-abuse evasion was introduced.
+Existing 2026-10-20 08:00 Europe/Lisbon guarded activation remains in place.
+Application-owned Telegram API credentials and a dedicated metrics bot, if
+needed for advanced attribution, remain external operational prerequisites.
+
 Updated: 2026-10-19 (feature branch; production status remains dated 2026-10-18)
 
 ## New capability under test (not yet proven in production)

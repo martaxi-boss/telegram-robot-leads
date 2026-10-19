@@ -47,6 +47,8 @@ jobs:
           scripts/operation_policy.py
           scripts/safe_runtime.py
           scripts/public_group_discovery.py
+          scripts/public_group_review.py
+          scripts/leads_operational_report.py
       - name: Local tests
         run: python -m unittest discover -s tests -v
       - name: Status shells parse safely

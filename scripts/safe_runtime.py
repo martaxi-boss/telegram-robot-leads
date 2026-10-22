@@ -360,9 +360,17 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     state = load_state(path, os.environ.get("TELEGRAM_TZ", "Europe/Lisbon"))
     report = {"group_actions": [], "member_actions": [], "blocked": []}
 
-    if os.environ.get("TELEGRAM_PUBLIC_DISCOVERY_ENABLED", "0").lower() in {
-        "1", "true", "yes", "on"
-    }:
+    discovery_enabled = os.environ.get(
+        "TELEGRAM_PUBLIC_DISCOVERY_ENABLED", "0"
+    ).lower() in {"1", "true", "yes", "on"}
+    if discovery_enabled and state["accounts"]["1"]["blocked"]:
+        # Discovery uses account 1. A durable Telegram hard stop applies to
+        # searches too, including on later days and after worker restarts.
+        report["public_discovery"] = {
+            "status": "BLOCKED",
+            "reason": "account_1_hard_stop",
+        }
+    elif discovery_enabled:
         try:
             report["public_discovery"] = await discover_daily(config, vault)
         except DiscoveryBlocked as exc:

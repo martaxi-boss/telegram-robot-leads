@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import stat
 import tempfile
 import time
 from datetime import datetime
@@ -64,8 +65,20 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
         raise PolicyBlocked("state_symlink_invalid")
     if not path.exists():
         return empty_state(tz_name)
+    # Never trust a publicly readable, oversized or replaced state journal.
+    # Verify the opened inode (not only the pathname) to prevent symlink races.
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "r", encoding="utf-8") as stream:
+            info = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(info.st_mode)
+                    or info.st_uid != os.geteuid()
+                    or stat.S_IMODE(info.st_mode) & 0o077
+                    or info.st_size > 8 * 1024 * 1024):
+                raise PolicyBlocked("state_permissions_or_size_invalid")
+            data = json.load(stream)
+    except PolicyBlocked:
+        raise
     except Exception as exc:
         raise PolicyBlocked("state_unreadable") from exc
     if not isinstance(data, dict):

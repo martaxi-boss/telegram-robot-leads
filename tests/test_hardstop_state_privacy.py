@@ -51,6 +51,60 @@ class DurableStatePrivacyTests(unittest.TestCase):
             self.assertTrue(restored["accounts"]["1"]["blocked"])
 
 
+    def test_future_day_never_resets_usage(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "operation-state.json"
+            state = policy.empty_state()
+            state["accounts"]["1"]["member_adds"] = 10
+            state["day"] = "2999-01-01"
+            policy.save_state(path, state)
+            with self.assertRaisesRegex(policy.PolicyBlocked, "state_day_in_future"):
+                policy.load_state(path)
+
+    def test_invalid_calendar_day_never_resets_usage(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "operation-state.json"
+            for invalid in ("not-a-date", "2026-02-30", None, "20261023"):
+                with self.subTest(day=invalid):
+                    state = policy.empty_state()
+                    state["accounts"]["1"]["member_adds"] = 10
+                    state["day"] = invalid
+                    policy.save_state(path, state)
+                    with self.assertRaisesRegex(policy.PolicyBlocked, "state_day_invalid"):
+                        policy.load_state(path)
+
+
+class MemoryTransportCleanupTests(unittest.TestCase):
+    def _client(self, connect_error=None, authorized=True):
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            connect=AsyncMock(side_effect=connect_error),
+            is_user_authorized=AsyncMock(return_value=authorized),
+            disconnect=AsyncMock(),
+        )
+
+    def test_authorization_failure_disconnects_transport(self):
+        client = self._client(authorized=False)
+        with patch.object(safe_runtime, "make_memory_client", return_value=client):
+            with self.assertRaises(safe_runtime.ProbeBlocked):
+                asyncio.run(safe_runtime._connected_client({"entries": [{}]}, 1))
+        client.disconnect.assert_awaited_once()
+
+    def test_connection_failure_disconnects_transport(self):
+        client = self._client(connect_error=TimeoutError("offline"))
+        with patch.object(safe_runtime, "make_memory_client", return_value=client):
+            with self.assertRaises(TimeoutError):
+                asyncio.run(safe_runtime._connected_client({"entries": [{}]}, 1))
+        client.disconnect.assert_awaited_once()
+
+    def test_success_leaves_transport_for_caller_to_close(self):
+        client = self._client()
+        with patch.object(safe_runtime, "make_memory_client", return_value=client):
+            obtained = asyncio.run(safe_runtime._connected_client({"entries": [{}]}, 1))
+        self.assertIs(obtained, client)
+        client.disconnect.assert_not_awaited()
+
+
 class PublicDiscoveryHardStopTests(unittest.TestCase):
     def _cycle(self, blocked):
         state = policy.empty_state()

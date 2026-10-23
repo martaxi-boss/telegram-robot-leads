@@ -102,5 +102,11 @@ comportamento para evitar controlos anti-spam do Telegram.
   outros) e com tamanho limitado. Um estado incorreto bloqueia a operacao;
   **nao apagar nem recriar** o ficheiro para ultrapassar o bloqueio, pois
   contem deduplicacao e resultados de operacoes remotas incertas.
+- Um estado com data invalida ou posterior ao calendario de Portugal
+  bloqueia a leitura, em vez de reiniciar as quotas a zero. A recuperacao
+  depende de analise humana da proveniencia e preservacao dos pendentes.
+- Qualquer falha durante a ligacao/autorizacao de uma sessao Telethon
+  desencadeia a sua desconexao antes de propagar o erro, sem modificar o
+  ficheiro de sessao SQLite guardado.
 - Esta verificacao apenas introduz testes offline e codigo num ramo de revisao.
   Nao constitui prova de instalacao na VPS, sucesso da pesquisa ou adicoes.

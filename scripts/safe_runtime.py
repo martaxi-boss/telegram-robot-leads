@@ -477,11 +477,42 @@ async def run_once(vault: Path = DEFAULT_VAULT) -> dict:
         os.close(fd)
 
 
+def public_cycle_summary(report: dict) -> dict:
+    """Small sanitized stdout record; full details remain in private journal.
+
+    PM2 stdout may be forwarded or retained outside the protected project vault.
+    Never publish @handles, usernames, Telegram IDs or filesystem paths there.
+    """
+    groups = report.get("group_actions") or []
+    members = report.get("member_actions") or []
+    discovery = report.get("public_discovery")
+    discovery_status = discovery.get("status") if isinstance(discovery, dict) else None
+    if discovery_status not in {
+        "PUBLIC_DISCOVERY_COMPLETE",
+        "PUBLIC_DISCOVERY_ALREADY_ATTEMPTED_TODAY",
+        "BLOCKED",
+        "ERROR",
+    }:
+        discovery_status = "NOT_REPORTED"
+    return {
+        "status": "CYCLE",
+        "public_discovery_status": discovery_status,
+        "group_actions_recorded": len(groups),
+        "groups_joined": sum(item.get("status") == "joined" for item in groups),
+        "member_actions_recorded": len(members),
+        "members_added": sum(item.get("status") == "added" for item in members),
+        "members_not_addable": sum(
+            item.get("status") == "not_addable" for item in members
+        ),
+        "blocked_actions": len(report.get("blocked") or []),
+    }
+
+
 async def loop(vault: Path, interval: int) -> None:
     while True:
         try:
             report = await run_once(vault)
-            print(json.dumps(report, ensure_ascii=False, sort_keys=True), flush=True)
+            print(json.dumps(public_cycle_summary(report), sort_keys=True), flush=True)
         except Exception as exc:
             blocked = {"status": "BLOCKED", "reason": type(exc).__name__}
             try:
@@ -509,7 +540,7 @@ def main() -> int:
         if args.once:
             print(
                 json.dumps(
-                    asyncio.run(run_once(args.vault)),
+                    public_cycle_summary(asyncio.run(run_once(args.vault))),
                     ensure_ascii=False,
                     sort_keys=True,
                 )

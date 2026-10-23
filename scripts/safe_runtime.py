@@ -172,11 +172,19 @@ def append_supervisor_event(event: dict) -> None:
 
 async def _connected_client(config: dict, account_number: int):
     client = make_memory_client(config["entries"][account_number - 1], config)
-    await asyncio.wait_for(client.connect(), timeout=25)
-    if not await asyncio.wait_for(client.is_user_authorized(), timeout=20):
-        await client.disconnect()
-        raise ProbeBlocked(f"account_{account_number}_not_authorized")
-    return client
+    try:
+        await asyncio.wait_for(client.connect(), timeout=25)
+        if not await asyncio.wait_for(client.is_user_authorized(), timeout=20):
+            raise ProbeBlocked(f"account_{account_number}_not_authorized")
+        return client
+    except BaseException:
+        # Even connection and authorization timeouts can leave an open
+        # Telethon transport. Avoid reusing half-open memory sessions.
+        try:
+            await asyncio.wait_for(client.disconnect(), timeout=10)
+        except Exception:
+            pass
+        raise
 
 
 def _is_hard_stop(exc: BaseException) -> bool:
@@ -360,9 +368,17 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     state = load_state(path, os.environ.get("TELEGRAM_TZ", "Europe/Lisbon"))
     report = {"group_actions": [], "member_actions": [], "blocked": []}
 
-    if os.environ.get("TELEGRAM_PUBLIC_DISCOVERY_ENABLED", "0").lower() in {
-        "1", "true", "yes", "on"
-    }:
+    discovery_enabled = os.environ.get(
+        "TELEGRAM_PUBLIC_DISCOVERY_ENABLED", "0"
+    ).lower() in {"1", "true", "yes", "on"}
+    if discovery_enabled and state["accounts"]["1"]["blocked"]:
+        # Discovery uses account 1. A durable Telegram hard stop applies to
+        # searches too, including on later days and after worker restarts.
+        report["public_discovery"] = {
+            "status": "BLOCKED",
+            "reason": "account_1_hard_stop",
+        }
+    elif discovery_enabled:
         try:
             report["public_discovery"] = await discover_daily(config, vault)
         except DiscoveryBlocked as exc:
@@ -461,11 +477,42 @@ async def run_once(vault: Path = DEFAULT_VAULT) -> dict:
         os.close(fd)
 
 
+def public_cycle_summary(report: dict) -> dict:
+    """Small sanitized stdout record; full details remain in private journal.
+
+    PM2 stdout may be forwarded or retained outside the protected project vault.
+    Never publish @handles, usernames, Telegram IDs or filesystem paths there.
+    """
+    groups = report.get("group_actions") or []
+    members = report.get("member_actions") or []
+    discovery = report.get("public_discovery")
+    discovery_status = discovery.get("status") if isinstance(discovery, dict) else None
+    if discovery_status not in {
+        "PUBLIC_DISCOVERY_COMPLETE",
+        "PUBLIC_DISCOVERY_ALREADY_ATTEMPTED_TODAY",
+        "BLOCKED",
+        "ERROR",
+    }:
+        discovery_status = "NOT_REPORTED"
+    return {
+        "status": "CYCLE",
+        "public_discovery_status": discovery_status,
+        "group_actions_recorded": len(groups),
+        "groups_joined": sum(item.get("status") == "joined" for item in groups),
+        "member_actions_recorded": len(members),
+        "members_added": sum(item.get("status") == "added" for item in members),
+        "members_not_addable": sum(
+            item.get("status") == "not_addable" for item in members
+        ),
+        "blocked_actions": len(report.get("blocked") or []),
+    }
+
+
 async def loop(vault: Path, interval: int) -> None:
     while True:
         try:
             report = await run_once(vault)
-            print(json.dumps(report, ensure_ascii=False, sort_keys=True), flush=True)
+            print(json.dumps(public_cycle_summary(report), sort_keys=True), flush=True)
         except Exception as exc:
             blocked = {"status": "BLOCKED", "reason": type(exc).__name__}
             try:
@@ -493,7 +540,7 @@ def main() -> int:
         if args.once:
             print(
                 json.dumps(
-                    asyncio.run(run_once(args.vault)),
+                    public_cycle_summary(asyncio.run(run_once(args.vault))),
                     ensure_ascii=False,
                     sort_keys=True,
                 )

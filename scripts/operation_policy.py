@@ -6,9 +6,11 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
+import stat
 import tempfile
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -64,8 +66,20 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
         raise PolicyBlocked("state_symlink_invalid")
     if not path.exists():
         return empty_state(tz_name)
+    # Never trust a publicly readable, oversized or replaced state journal.
+    # Verify the opened inode (not only the pathname) to prevent symlink races.
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "r", encoding="utf-8") as stream:
+            info = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(info.st_mode)
+                    or info.st_uid != os.geteuid()
+                    or stat.S_IMODE(info.st_mode) & 0o077
+                    or info.st_size > 8 * 1024 * 1024):
+                raise PolicyBlocked("state_permissions_or_size_invalid")
+            data = json.load(stream)
+    except PolicyBlocked:
+        raise
     except Exception as exc:
         raise PolicyBlocked("state_unreadable") from exc
     if not isinstance(data, dict):
@@ -91,7 +105,20 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
             raise PolicyBlocked("state_account_invalid")
         if account.get("blocked") and not isinstance(account.get("reason"), str):
             raise PolicyBlocked("state_block_reason_invalid")
-    if data.get("day") != _today(tz_name):
+    # An invalid or future day must never reset today's accounting or a
+    # pending remote outcome. Only well-formed past days may roll over.
+    state_day = data.get("day")
+    today = _today(tz_name)
+    if (not isinstance(state_day, str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", state_day)):
+        raise PolicyBlocked("state_day_invalid")
+    try:
+        date.fromisoformat(state_day)
+    except ValueError as exc:
+        raise PolicyBlocked("state_day_invalid") from exc
+    if state_day > today:
+        raise PolicyBlocked("state_day_in_future")
+    if state_day != today:
         # Keep pending remote outcomes and platform hard stops across midnight.
         previous = data
         data = empty_state(tz_name)

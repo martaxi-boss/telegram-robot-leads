@@ -90,3 +90,27 @@ não antecipar a ativação.
 O motor de adição direta está limitado a quem autorizou explicitamente entrar
 no grupo. Não inclui cópia em massa de listas de terceiros nem camuflagem do
 comportamento para evitar controlos anti-spam do Telegram.
+
+## 6. Correcoes preventivas propostas em 2026-10-23
+
+- A descoberta publica usa a conta 1. Se o estado persistente indicar uma
+  restricao da conta, o ciclo reporta `account_1_hard_stop` sem ligar ao
+  Telegram nem repetir uma pesquisa no dia seguinte. A remocao do bloqueio
+  requer reconciliacao operacional explicita; nunca ocorre por meia-noite.
+- O ficheiro `operation-state.json` existente deve ser um ficheiro regular,
+  pertencente ao utilizador do processo, privado (sem permissoes de grupo ou
+  outros) e com tamanho limitado. Um estado incorreto bloqueia a operacao;
+  **nao apagar nem recriar** o ficheiro para ultrapassar o bloqueio, pois
+  contem deduplicacao e resultados de operacoes remotas incertas.
+- Um estado com data invalida ou posterior ao calendario de Portugal
+  bloqueia a leitura, em vez de reiniciar as quotas a zero. A recuperacao
+  depende de analise humana da proveniencia e preservacao dos pendentes.
+- Qualquer falha durante a ligacao/autorizacao de uma sessao Telethon
+  desencadeia a sua desconexao antes de propagar o erro, sem modificar o
+  ficheiro de sessao SQLite guardado.
+- O stdout regular do PM2 e o modo `--once` devolvem apenas contagens
+  e codigos de estado. Os nomes de grupos e de utilizadores permanecem no
+  diario privado do Supervisor (`supervisor-events.jsonl`, permissao 0600);
+  nao encaminhar esse ficheiro para logs ou notificacoes publicas.
+- Esta verificacao apenas introduz testes offline e codigo num ramo de revisao.
+  Nao constitui prova de instalacao na VPS, sucesso da pesquisa ou adicoes.

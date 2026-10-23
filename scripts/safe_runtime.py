@@ -172,11 +172,19 @@ def append_supervisor_event(event: dict) -> None:
 
 async def _connected_client(config: dict, account_number: int):
     client = make_memory_client(config["entries"][account_number - 1], config)
-    await asyncio.wait_for(client.connect(), timeout=25)
-    if not await asyncio.wait_for(client.is_user_authorized(), timeout=20):
-        await client.disconnect()
-        raise ProbeBlocked(f"account_{account_number}_not_authorized")
-    return client
+    try:
+        await asyncio.wait_for(client.connect(), timeout=25)
+        if not await asyncio.wait_for(client.is_user_authorized(), timeout=20):
+            raise ProbeBlocked(f"account_{account_number}_not_authorized")
+        return client
+    except BaseException:
+        # Even connection and authorization timeouts can leave an open
+        # Telethon transport. Avoid reusing half-open memory sessions.
+        try:
+            await asyncio.wait_for(client.disconnect(), timeout=10)
+        except Exception:
+            pass
+        raise
 
 
 def _is_hard_stop(exc: BaseException) -> bool:

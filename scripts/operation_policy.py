@@ -110,7 +110,7 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
     state_day = data.get("day")
     today = _today(tz_name)
     if (not isinstance(state_day, str)
-            or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", state_day)):
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", state_day)):
         raise PolicyBlocked("state_day_invalid")
     try:
         date.fromisoformat(state_day)

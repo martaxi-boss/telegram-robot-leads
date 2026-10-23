@@ -6,10 +6,11 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import stat
 import tempfile
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -104,7 +105,20 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
             raise PolicyBlocked("state_account_invalid")
         if account.get("blocked") and not isinstance(account.get("reason"), str):
             raise PolicyBlocked("state_block_reason_invalid")
-    if data.get("day") != _today(tz_name):
+    # An invalid or future day must never reset today's accounting or a
+    # pending remote outcome. Only well-formed past days may roll over.
+    state_day = data.get("day")
+    today = _today(tz_name)
+    if (not isinstance(state_day, str)
+            or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", state_day)):
+        raise PolicyBlocked("state_day_invalid")
+    try:
+        date.fromisoformat(state_day)
+    except ValueError as exc:
+        raise PolicyBlocked("state_day_invalid") from exc
+    if state_day > today:
+        raise PolicyBlocked("state_day_in_future")
+    if state_day != today:
         # Keep pending remote outcomes and platform hard stops across midnight.
         previous = data
         data = empty_state(tz_name)

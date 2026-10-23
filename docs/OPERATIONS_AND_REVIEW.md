@@ -108,5 +108,9 @@ comportamento para evitar controlos anti-spam do Telegram.
 - Qualquer falha durante a ligacao/autorizacao de uma sessao Telethon
   desencadeia a sua desconexao antes de propagar o erro, sem modificar o
   ficheiro de sessao SQLite guardado.
+- O stdout regular do PM2 e o modo `--once` devolvem apenas contagens
+  e codigos de estado. Os nomes de grupos e de utilizadores permanecem no
+  diario privado do Supervisor (`supervisor-events.jsonl`, permissao 0600);
+  nao encaminhar esse ficheiro para logs ou notificacoes publicas.
 - Esta verificacao apenas introduz testes offline e codigo num ramo de revisao.
   Nao constitui prova de instalacao na VPS, sucesso da pesquisa ou adicoes.

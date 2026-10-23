@@ -105,6 +105,44 @@ class MemoryTransportCleanupTests(unittest.TestCase):
         client.disconnect.assert_not_awaited()
 
 
+class SanitizedCycleReportTests(unittest.TestCase):
+    def test_public_summary_never_prints_usernames_or_paths(self):
+        raw = {
+            "group_actions": [
+                {"group": "@PrivateGroup", "account": 1, "status": "joined"}
+            ],
+            "member_actions": [
+                {"user": "@SecretPerson", "account": 2, "status": "added"},
+                {"user": "@BlockedPerson", "account": 1, "status": "not_addable"},
+            ],
+            "blocked": [
+                {"reason": "account_1_blocked:@SecretPerson"}
+            ],
+            "public_discovery": {
+                "status": "PUBLIC_DISCOVERY_COMPLETE",
+                "catalog": "/root/secret/catalog.json",
+            },
+        }
+        summary = safe_runtime.public_cycle_summary(raw)
+        self.assertEqual(summary["groups_joined"], 1)
+        self.assertEqual(summary["members_added"], 1)
+        self.assertEqual(summary["members_not_addable"], 1)
+        self.assertEqual(summary["blocked_actions"], 1)
+        import json
+        encoded = json.dumps(summary)
+        for private_string in (
+            "@PrivateGroup", "@SecretPerson", "@BlockedPerson", "/root/secret"
+        ):
+            self.assertNotIn(private_string, encoded)
+
+    def test_unknown_discovery_status_is_never_repeated_to_stdout(self):
+        summary = safe_runtime.public_cycle_summary({
+            "group_actions": [], "member_actions": [], "blocked": [],
+            "public_discovery": {"status": "SENSITIVE@myaccount"},
+        })
+        self.assertEqual(summary["public_discovery_status"], "NOT_REPORTED")
+
+
 class PublicDiscoveryHardStopTests(unittest.TestCase):
     def _cycle(self, blocked):
         state = policy.empty_state()

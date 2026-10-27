@@ -199,5 +199,120 @@ class OperationalReportTests(unittest.TestCase):
         self.assertEqual(result["status"], "PM2_ONLINE_DISCOVERY_NOT_VERIFIED")
 
 
+    def test_action_queue_explains_empty_member_activity_without_names(self):
+        result = self.build()
+        self.assertEqual(result["action_queue"]["status"], "READABLE")
+        self.assertEqual(result["action_queue"]["approved_username_entries"], 0)
+        self.assertEqual(result["action_queue"]["member_queue_status"], "EMPTY")
+
+        approved = self.vault / "approved_users.txt"
+        approved.write_text(
+            "@PrivateAlpha|APPROVED\n@PrivateBravo|CONSENTED\n",
+            encoding="utf-8",
+        )
+        approved.chmod(0o600)
+        allowlist = self.vault / "group_allowlist.txt"
+        allowlist.write_text("@PrivateGroup\n", encoding="utf-8")
+        allowlist.chmod(0o600)
+        result = self.build()
+        self.assertEqual(result["action_queue"]["approved_username_entries"], 2)
+        self.assertEqual(result["action_queue"]["allowlisted_group_entries"], 1)
+        self.assertEqual(
+            result["action_queue"]["member_queue_status"],
+            "OPERATOR_ENTRIES_NOT_ONLINE_VERIFIED",
+        )
+        output = json.dumps(result)
+        for handle in ("@PrivateAlpha", "@PrivateBravo", "@PrivateGroup"):
+            self.assertNotIn(handle, output)
+
+    def test_invalid_action_queue_permission_does_not_leak_usernames(self):
+        approved = self.vault / "approved_users.txt"
+        approved.write_text("@PrivateAlpha|APPROVED\n", encoding="utf-8")
+        approved.chmod(0o644)
+        result = self.build()
+        self.assertEqual(result["action_queue"]["status"], "BLOCKED")
+        self.assertNotIn("@PrivateAlpha", json.dumps(result))
+
+    def test_report_cli_skips_pm2_by_default(self):
+        import io
+        with patch.object(report, "read_pm2", side_effect=AssertionError("PM2 invoked")), \
+             patch.object(report, "build_report", return_value={"status": "OFFLINE_ONLY"}) as build, \
+             patch("sys.argv", ["leads_operational_report.py"]), \
+             patch("sys.stdout", new_callable=io.StringIO):
+            self.assertEqual(report.main(), 0)
+        self.assertIsNone(build.call_args.kwargs["pm2_records"])
+
+    def test_report_cli_queries_pm2_only_when_explicitly_requested(self):
+        import io
+        with patch.object(report, "read_pm2", return_value=([], None)) as query, \
+             patch.object(report, "build_report", return_value={"status": "NOT_LIVE_VERIFIED"}), \
+             patch("sys.argv", ["leads_operational_report.py", "--with-pm2"]), \
+             patch("sys.stdout", new_callable=io.StringIO):
+            self.assertEqual(report.main(), 0)
+        query.assert_called_once_with()
+
+    def test_growth_readiness_explains_why_zero_does_not_mean_a_network_error(self):
+        result = self.build(expected_sha="b" * 40)
+        self.assertEqual(result["organic_growth_model"]["status"], "NOT_CONFIGURED")
+        self.assertIn(
+            "NO_APPROVED_USERS_IN_DIRECT_ADD_QUEUE", result["readiness_indicators"]
+        )
+        self.assertIn(
+            "ORGANIC_GROWTH_MODEL_NOT_CONFIGURED", result["readiness_indicators"]
+        )
+        self.assertIn(
+            "PRIVATE_APPLICATION_CREDENTIALS_NOT_CONFIGURED", result["readiness_indicators"]
+        )
+        self.assertIn(
+            "INSTALLED_SOURCE_DIFFERS_FROM_EXPECTED", result["readiness_indicators"]
+        )
+
+    def test_growth_model_config_readiness_does_not_leak_channel_handle(self):
+        config = self.vault / "growth_model.json"
+        config.write_text(json.dumps({
+            "schema": 1,
+            "target_group": "@iptvpncode",
+            "approve_join_requests": True,
+            "owned_channel": "@PrivateOwnedChannel",
+            "publish_in_owned_channel": True,
+            "publisher_account": 1,
+        }), encoding="utf-8")
+        config.chmod(0o600)
+        result = self.build()
+        self.assertEqual(
+            result["organic_growth_model"]["status"],
+            "CONFIGURED_NOT_ONLINE_VERIFIED",
+        )
+        self.assertNotIn("@PrivateOwnedChannel", json.dumps(result))
+        self.assertNotIn(
+            "ORGANIC_GROWTH_MODEL_NOT_CONFIGURED", result["readiness_indicators"]
+        )
+
+    def test_supervisor_growth_counters_are_readonly_and_redacted(self):
+        self.events.write_text(json.dumps({
+            "ts": int(self.now) - 2,
+            "event": {
+                "kind": "cycle",
+                "group_actions": [],
+                "member_actions": [],
+                "blocked": [],
+                "organic_growth": {
+                    "join_requests": {
+                        "status": "APPROVED_REQUEST", "user_id": 222222
+                    },
+                    "owned_promotion": {
+                        "status": "POSTED", "channel": "@SecretOwnedChannel"
+                    },
+                },
+            },
+        }) + "\n", encoding="utf-8")
+        outcome = self.build()
+        self.assertEqual(outcome["supervisor"]["approvals_in_last_cycle"], 1)
+        self.assertEqual(outcome["supervisor"]["owned_posts_in_last_cycle"], 1)
+        self.assertEqual(outcome["supervisor"]["join_request_status"], "APPROVED_REQUEST")
+        self.assertNotIn("222222", json.dumps(outcome))
+        self.assertNotIn("@SecretOwnedChannel", json.dumps(outcome))
+
+
 if __name__ == "__main__":
     unittest.main()

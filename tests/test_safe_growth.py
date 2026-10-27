@@ -88,6 +88,19 @@ class HealthTests(unittest.TestCase):
             finally:
                 root.chmod(0o700)
 
+    def test_health_default_never_queries_pm2(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = io.StringIO()
+            with (
+                patch('sys.argv', ['lead_health.py', '--root', directory]),
+                patch('lead_health.read_pm2',
+                      side_effect=AssertionError('PM2 must be opt-in')),
+                contextlib.redirect_stdout(output),
+            ):
+                self.assertEqual(lead_health.main(), 0)
+            result = json.loads(output.getvalue())
+            self.assertIn('not queried', result['runtime']['diagnostic'])
+
     def test_health_no_pm2_does_not_spawn_an_external_process(self):
         with tempfile.TemporaryDirectory() as directory:
             output = io.StringIO()
@@ -110,7 +123,8 @@ class HealthTests(unittest.TestCase):
         self.assertIn('telegram-robot-leads-status.sh', legacy)
         self.assertNotIn('sqlite3.connect', legacy)
         self.assertNotIn('tail -', legacy)
-        self.assertNotIn('--no-pm2', current)
+        self.assertIn('--no-pm2', current)
+        self.assertNotIn('--with-pm2', current)
         self.assertIn('/root/project-secrets/telegram-robot-leads', current)
         self.assertIn('--stats', current)
 

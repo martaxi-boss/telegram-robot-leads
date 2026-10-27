@@ -36,6 +36,11 @@ from operation_policy import (
 )
 from telethon_sessions import DEFAULT_VAULT, ProbeBlocked, inspect, make_memory_client
 from public_group_discovery import DiscoveryBlocked, discover_daily
+from organic_growth import (
+    approve_pending_join_request,
+    promote_owned_channel,
+    read_model,
+)
 
 GROUP_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
 USER_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
@@ -367,6 +372,7 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     path = _state_path()
     state = load_state(path, os.environ.get("TELEGRAM_TZ", "Europe/Lisbon"))
     report = {"group_actions": [], "member_actions": [], "blocked": []}
+    model = read_model(vault, config.get("group", ""))
 
     discovery_enabled = os.environ.get(
         "TELEGRAM_PUBLIC_DISCOVERY_ENABLED", "0"
@@ -395,6 +401,38 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
             report["public_discovery"] = {
                 "status": "ERROR", "reason": type(exc).__name__
             }
+
+    # The opt-in model uses only this existing worker, its lock and its durable
+    # state. A missing private growth_model.json means ZERO growth-model writes.
+    report["organic_growth"] = {"status": "NOT_CONFIGURED"}
+    if model is not None:
+        report["organic_growth"] = {}
+        for label, action, account_number in (
+            ("owned_promotion", promote_owned_channel, model["publisher_account"]),
+            ("join_requests", approve_pending_join_request, 1),
+        ):
+            try:
+                outcome = await action(
+                    config, model, state, lambda value: save_state(path, value),
+                    _connected_client,
+                    tz=os.environ.get("TELEGRAM_TZ", "Europe/Lisbon"),
+                )
+                report["organic_growth"][label] = outcome
+            except (PolicyBlocked, PolicyDeferred, ProbeBlocked) as exc:
+                report["organic_growth"][label] = {
+                    "status": "BLOCKED", "reason": str(exc),
+                }
+                save_state(path, state)
+            except Exception as exc:
+                if _is_hard_stop(exc):
+                    reason = type(exc).__name__
+                    if isinstance(exc, errors.FloodWaitError):
+                        reason += f":{exc.seconds}s"
+                    block_account(state, account_number, reason)
+                report["organic_growth"][label] = {
+                    "status": "ERROR", "reason": type(exc).__name__,
+                }
+                save_state(path, state)
 
     for group in groups:
         account = assigned_group_account(state, group)
@@ -447,6 +485,7 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
         "member_actions": report["member_actions"],
         "blocked": report["blocked"],
         "public_discovery": report.get("public_discovery"),
+        "organic_growth": report.get("organic_growth"),
     })
     return report
 
@@ -494,9 +533,33 @@ def public_cycle_summary(report: dict) -> dict:
         "ERROR",
     }:
         discovery_status = "NOT_REPORTED"
+    organic = report.get("organic_growth") or {}
+    owned = organic.get("owned_promotion") if isinstance(organic, dict) else None
+    intake = organic.get("join_requests") if isinstance(organic, dict) else None
+    # Only stable status names and counters may reach the PM2 log.
+    stable_statuses = {
+        "NOT_CONFIGURED", "DISABLED", "OUTSIDE_POST_WINDOW",
+        "OUTSIDE_JOIN_WINDOW", "ACCOUNT_BLOCKED", "ACCOUNT_INTERVAL",
+        "ALREADY_POSTED_TODAY", "PREFLIGHT_ALREADY_ATTEMPTED_TODAY",
+        "PENDING_MANUAL_RECONCILIATION", "POSTED", "APPROVED_REQUEST",
+        "NO_PENDING_REQUESTS", "NEXT_SCAN_NOT_DUE", "POLICY_DEFERRED",
+        "BLOCKED", "ERROR",
+    }
+    def status(value: dict | None) -> str:
+        candidate = value.get("status") if isinstance(value, dict) else None
+        return candidate if candidate in stable_statuses else "NOT_CONFIGURED"
+
     return {
         "status": "CYCLE",
         "public_discovery_status": discovery_status,
+        "owned_promotion_status": status(owned),
+        "join_request_status": status(intake),
+        "owned_channel_posts": (
+            1 if isinstance(owned, dict) and owned.get("status") == "POSTED" else 0
+        ),
+        "join_requests_approved": (
+            1 if isinstance(intake, dict) and intake.get("status") == "APPROVED_REQUEST" else 0
+        ),
         "group_actions_recorded": len(groups),
         "groups_joined": sum(item.get("status") == "joined" for item in groups),
         "member_actions_recorded": len(members),

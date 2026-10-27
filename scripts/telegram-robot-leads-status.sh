@@ -8,13 +8,13 @@ vault="${TELEGRAM_ROBOT_LEADS_VAULT:-/root/project-secrets/telegram-robot-leads}
 metrics_root="${TELEGRAM_ROBOT_LEADS_METRICS_ROOT:-/opt/telegram-leads-optin}"
 
 printf '=== Telegram Robot Leads: protected vault (metadata only) ===\n'
-"$python_bin" "$script_dir/lead_health.py" --root "$vault"
+"$python_bin" "$script_dir/lead_health.py" --root "$vault" --no-pm2
 printf '=== Telegram Robot Leads: opt-in metrics (read-only) ===\n'
 "$python_bin" "$script_dir/growth_tracker.py" --root "$metrics_root" --stats
 printf '=== Robot Leads: evidence-based operational snapshot (redacted) ===\n'
 runtime_python="/opt/telegram-robot-leads/.venv/bin/python"
 if [[ -x "$runtime_python" ]]; then
-  report_args=(--vault "$vault")
+  report_args=(--vault "$vault" --no-pm2)
   if [[ -n "${TELEGRAM_LEADS_EXPECTED_SOURCE:-}" ]]; then
     report_args+=(--expected-source "$TELEGRAM_LEADS_EXPECTED_SOURCE")
   fi
@@ -22,4 +22,4 @@ if [[ -x "$runtime_python" ]]; then
 else
   printf '=== Operational snapshot unavailable: runtime Python missing ===\n'
 fi
-printf '=== PM2 state is read-only and does not prove Telegram connectivity ===\n'
+printf '=== PM2 deliberately not queried: avoids starting a daemon in the wrong account ===\n'

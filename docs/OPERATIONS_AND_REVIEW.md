@@ -40,9 +40,11 @@ autoriza automaticamente todos os grupos encontrados nem altera outras apps.
   --expected-source CODIGO_SHA_VERIFICADO \
   --no-pm2
 
-# Inclui o estado PM2, mantendo zero chamadas ao Telegram:
+# Opcional: usar apenas no contexto do utilizador que gere o PM2 correto.
+# A CLI do PM2 pode iniciar outro daemon se ainda não existir nenhum.
 .venv/bin/python scripts/leads_operational_report.py \
-  --expected-source CODIGO_SHA_VERIFICADO
+  --expected-source CODIGO_SHA_VERIFICADO \
+  --with-pm2
 
 # O comando de estado já existente inclui o relatório:
 bash scripts/telegram-robot-leads-status.sh
@@ -53,7 +55,11 @@ A resposta identifica:
 - SHA realmente instalada e se coincide com o SHA esperado.
 - Duas sessões legíveis **offline**; distingue credenciais próprias da
   aplicação da API pública Android de fallback.
-- PM2 online/ausente/duplicado, sem confundir com funcionamento Telegram.
+- Estado PM2 apenas com `--with-pm2`, nunca por defeito; sem isso
+  o resultado é `NOT_QUERIED` para evitar arrancar daemons noutras contas.
+- Contagens redigidas da fila (`approved_username_entries`) e dos
+  grupos autorizados (`allowlisted_group_entries`), distinguindo uma
+  fila vazia (`EMPTY`) de grupos apenas encontrados na pesquisa.
 - Quantidade de grupos públicos pesquisados e data da última tentativa.
 - Contagem de contas restringidas, ações pendentes e adições autorizadas.
 - Último evento do Supervisor, com contagens e códigos, **sem nomes de

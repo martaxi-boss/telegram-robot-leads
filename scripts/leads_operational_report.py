@@ -21,7 +21,12 @@ from typing import Any
 from lead_health import PROCESS_NAME, read_pm2
 from operation_policy import PolicyBlocked, load_state
 from public_group_discovery import DEFAULT_CATALOG, DiscoveryBlocked, read_catalog, public_join_url
-from safe_runtime import DEFAULT_EVENT_JOURNAL, DEFAULT_STATE
+from safe_runtime import (
+    DEFAULT_EVENT_JOURNAL,
+    DEFAULT_STATE,
+    load_approved_users,
+    load_group_allowlist,
+)
 from telethon_sessions import DEFAULT_VAULT, ProbeBlocked, inspect
 
 DEFAULT_CHECKOUT = Path("/opt/telegram-robot-leads")
@@ -98,6 +103,27 @@ def _vault(vault: Path) -> dict[str, Any]:
         # Avoid printing exceptions from potentially credential-bearing paths.
         return {"status": "BLOCKED", "reason": _redacted_reason(str(exc)),
                 "online_verified": False}
+
+
+def _action_queue(vault: Path) -> dict[str, Any]:
+    """Read only operator-selected queue counts; never expose handles.
+
+    Finding public groups is not the same as authorizing any member additions.
+    """
+    try:
+        _private_directory(vault)
+        users = load_approved_users(vault)
+        groups = load_group_allowlist(vault)
+        return {
+            "status": "READABLE",
+            "approved_username_entries": len(users),
+            "allowlisted_group_entries": len(groups),
+            "member_queue_status": (
+                "EMPTY" if not users else "OPERATOR_ENTRIES_NOT_ONLINE_VERIFIED"
+            ),
+        }
+    except (ProbeBlocked, OSError, ValueError, UnicodeError) as exc:
+        return {"status": "BLOCKED", "reason": _redacted_reason(str(exc))}
 
 
 def _discovery(path: Path) -> dict[str, Any]:
@@ -222,6 +248,7 @@ def build_report(
     current = time.time() if now is None else now
     source = _source(checkout, expected_sha)
     accounts = _vault(vault)
+    action_queue = _action_queue(vault)
     catalog = _discovery(catalog_path)
     operation = _operation_state(state_path)
     event = _events(events_path, current)
@@ -258,6 +285,7 @@ def build_report(
         "status": result,
         "source": source,
         "sessions": accounts,
+        "action_queue": action_queue,
         "pm2": pm2,
         "public_discovery": catalog,
         "operation_state": operation,
@@ -273,14 +301,18 @@ def main() -> int:
     parser.add_argument("--state", type=Path, default=DEFAULT_STATE)
     parser.add_argument("--events", type=Path, default=DEFAULT_EVENT_JOURNAL)
     parser.add_argument("--expected-source", type=str)
+    parser.add_argument("--with-pm2", action="store_true",
+                        help="Opt in to PM2 query (may start a daemon for this user)")
     parser.add_argument("--no-pm2", action="store_true",
-                        help="Do not contact PM2 or any external service")
+                        help="Compatibility option; no PM2 query is the default")
     args = parser.parse_args()
+    if args.with_pm2 and args.no_pm2:
+        parser.error("--with-pm2 and --no-pm2 are mutually exclusive")
     if args.expected_source and not SHA256.fullmatch(args.expected_source):
         parser.error("expected source must be a full 40-character Git SHA")
     records = None
     pm2_error = None
-    if not args.no_pm2:
+    if args.with_pm2:
         records, pm2_error = read_pm2()
     report = build_report(
         vault=args.vault, checkout=args.checkout, catalog_path=args.catalog,

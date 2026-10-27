@@ -40,55 +40,52 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: certify
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
-      LEADS_HOST: ${{ secrets.TELEGRAM_LEADS_SSH_HOST }}
-      LEADS_USER: ${{ secrets.TELEGRAM_LEADS_SSH_USER }}
-      LEADS_PORT: ${{ secrets.TELEGRAM_LEADS_SSH_PORT }}
-      LEADS_KEY: ${{ secrets.TELEGRAM_LEADS_SSH_KEY }}
-      LEADS_KNOWN_HOSTS: ${{ secrets.TELEGRAM_LEADS_SSH_KNOWN_HOSTS }}
+      SSHPASS: ${{ secrets.TELEGRAM_LEADS_SSH_PASSWORD }}
       LEADS_PM2_HOME: ${{ secrets.TELEGRAM_LEADS_PM2_HOME }}
       EXPECTED_INSTALLED: d8736bd359de795182ee717448c93df2977d0a44
     steps:
       - uses: actions/checkout@v4
-
-      - name: Validate dedicated Telegram Leads SSH configuration
+      - name: Validate project-only password SSH and pinned host
         shell: bash
         run: |
           set -euo pipefail
-          for name in LEADS_HOST LEADS_USER LEADS_KEY LEADS_KNOWN_HOSTS; do
-            if [[ -z "${!name}" ]]; then
-              echo "::error::BLOCKED: configure ${name} in THIS repository's dedicated Actions secrets."
-              exit 2
-            fi
-          done
-          [[ "$LEADS_HOST" =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "::error::Invalid SSH host"; exit 2; }
-          [[ "$LEADS_USER" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "::error::Invalid SSH user"; exit 2; }
-          port="${LEADS_PORT:-22}"
-          [[ "$port" =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1 && 10#$port <= 65535)) || { echo "::error::Invalid SSH port"; exit 2; }
-          if [[ -n "$LEADS_PM2_HOME" ]]; then
-            [[ "$LEADS_PM2_HOME" =~ ^/[a-zA-Z0-9/._-]+$ ]] && [[ "$LEADS_PM2_HOME" != *..* ]] || { echo "::error::Invalid dedicated PM2_HOME"; exit 2; }
+          [[ "$GITHUB_REPOSITORY" == "martaxi-boss/telegram-robot-leads" ]] || exit 2
+          if [[ -z "${SSHPASS:-}" ]]; then
+            echo "::error::Configure TELEGRAM_LEADS_SSH_PASSWORD in Telegram Leads Actions secrets."
+            exit 2
           fi
+          if [[ -n "$LEADS_PM2_HOME" ]]; then
+            [[ "$LEADS_PM2_HOME" =~ ^/[a-zA-Z0-9/._-]+$ ]] && [[ "$LEADS_PM2_HOME" != *..* ]] || { echo '::error::Invalid PM2_HOME'; exit 2; }
+          fi
+          known="$RUNNER_TEMP/telegram-leads-pinned-host"
+          ssh-keyscan -T 15 -t ed25519 146.59.145.3 2>/dev/null > "$known" || { echo '::error::SSH host unavailable'; exit 2; }
+          chmod 600 "$known"
+          observed="$(ssh-keygen -lf "$known" -E sha256 | awk '{print $2}')"
+          [[ "$observed" == 'SHA256:Q7y5zs6sXWHtznlMQS/IQjcqPKdr7YEku1hWlNLvdxc' ]] || { echo '::error::SSH host identity mismatch'; exit 2; }
+          ssh-keygen -F 146.59.145.3 -f "$known" >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass >/dev/null
+          sshpass -e ssh -T -o PreferredAuthentications=password -o PubkeyAuthentication=no \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known" \
+            -o GlobalKnownHostsFile=/dev/null -o HostKeyAlgorithms=ssh-ed25519 \
+            -o ConnectTimeout=10 ubuntu@146.59.145.3 'sudo -n id -u' | grep -qx 0
 
       - name: Release only allowlisted Telegram Leads code
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          key="$RUNNER_TEMP/telegram-leads-ssh-key"
-          known="$RUNNER_TEMP/telegram-leads-known-hosts"
-          trap 'rm -f "$key" "$known"' EXIT
-          printf '%s\n' "$LEADS_KEY" > "$key"
-          printf '%s\n' "$LEADS_KNOWN_HOSTS" > "$known"
-          chmod 600 "$key" "$known"
-          port="${LEADS_PORT:-22}"
+          known="$RUNNER_TEMP/telegram-leads-pinned-host"
+          dest='ubuntu@146.59.145.3'
+          ssh_opts=(-T -o PreferredAuthentications=password -o PubkeyAuthentication=no
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known"
+            -o GlobalKnownHostsFile=/dev/null -o HostKeyAlgorithms=ssh-ed25519
+            -o ConnectTimeout=10)
           sha="$GITHUB_SHA"
           [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || exit 2
-          dest="$LEADS_USER@$LEADS_HOST"
-          ssh_flags=(-i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known" -o ConnectTimeout=10 -p "$port")
-          scp_flags=(-i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known" -o ConnectTimeout=10 -P "$port")
           bundle="$RUNNER_TEMP/telegram-leads-runtime.tgz"
-
-          # Never package credentials, databases, unrelated repos or unreviewed files.
           tar -czf "$bundle" -- \
             scripts/lead_health.py \
             scripts/leads_operational_report.py \
@@ -99,34 +96,30 @@ jobs:
             scripts/telegram-robot-leads-status.sh \
             scripts/deploy_project_only.py \
             scripts/activate_project_only.py
-
           upload="/opt/telegram-robot-leads/.telegram-leads-release-$sha.tgz"
           installer="/opt/telegram-robot-leads/.telegram-leads-installer-$sha.py"
-          ssh "${ssh_flags[@]}" "$dest" \
-            "test \"\$(id -u)\" = 0 && test -d /opt/telegram-robot-leads && test ! -L /opt/telegram-robot-leads && test -d /root/project-secrets/telegram-robot-leads && test ! -e '$upload' && test ! -L '$upload' && test ! -e '$installer' && test ! -L '$installer'"
-          scp "${scp_flags[@]}" "$bundle" "$dest:$upload"
-          scp "${scp_flags[@]}" scripts/deploy_project_only.py "$dest:$installer"
-
-          # Existing SHA guard, owner-only two sessions and private backup.
-          ssh "${ssh_flags[@]}" "$dest" \
-            "/usr/bin/python3 '$installer' --bundle '$upload' --commit '$sha' --expected-installed '$EXPECTED_INSTALLED' --apply --confirm-telegram-only"
-
-          # Remove only these two generated files from the Telegram project root.
-          ssh "${ssh_flags[@]}" "$dest" \
-            "rm -f -- '$upload' '$installer'"
-
-          # Delete only generated bytecode; never secrets, journals, state or venv.
-          ssh "${ssh_flags[@]}" "$dest" \
-            "/usr/bin/python3 /opt/telegram-robot-leads/scripts/project_hygiene.py --apply --confirm-telegram-only"
-
+          sshpass -e ssh "${ssh_opts[@]}" "$dest" \
+            "sudo -n sh -c 'test -d /opt/telegram-robot-leads && test ! -L /opt/telegram-robot-leads && test -d /root/project-secrets/telegram-robot-leads'"
+          sshpass -e ssh "${ssh_opts[@]}" "$dest" \
+            "sudo -n sh -c 'test ! -e \"$upload\" && test ! -L \"$upload\" && test ! -e \"$installer\" && test ! -L \"$installer\"'"
+          cleanup() {
+            sshpass -e ssh "${ssh_opts[@]}" "$dest" \
+              "sudo -n rm -f -- '$upload' '$installer'" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          sshpass -e ssh "${ssh_opts[@]}" "$dest" \
+            "sudo -n sh -c 'umask 077; cat > \"$upload\"'" < "$bundle"
+          sshpass -e ssh "${ssh_opts[@]}" "$dest" \
+            "sudo -n sh -c 'umask 077; cat > \"$installer\"'" < scripts/deploy_project_only.py
+          sshpass -e ssh "${ssh_opts[@]}" "$dest" \
+            "sudo -n /usr/bin/python3 '$installer' --bundle '$upload' --commit '$sha' --expected-installed '$EXPECTED_INSTALLED' --apply --confirm-telegram-only"
+          sshpass -e ssh "${ssh_opts[@]}" "$dest" \
+            "sudo -n /usr/bin/python3 /opt/telegram-robot-leads/scripts/project_hygiene.py --apply --confirm-telegram-only"
           if [[ -z "$LEADS_PM2_HOME" ]]; then
-            echo "::warning::Code staged and Telegram-only hygiene executed. Not activated: dedicated PM2_HOME is not configured."
+            echo '::warning::Telegram-only code staged; worker not restarted because TELEGRAM_LEADS_PM2_HOME is unset.'
             exit 0
           fi
-          # Restart only the one verified worker in the existing correct PM2 daemon.
-          ssh "${ssh_flags[@]}" "$dest" \
-            "/usr/bin/python3 /opt/telegram-robot-leads/scripts/activate_project_only.py --pm2-home '$LEADS_PM2_HOME' --expected-source '$sha' --apply --confirm-telegram-only"
-
-          # Read-only redacted report: no PM2 discovery daemon and no Telegram calls.
-          ssh "${ssh_flags[@]}" "$dest" \
-            "/opt/telegram-robot-leads/.venv/bin/python /opt/telegram-robot-leads/scripts/leads_operational_report.py --expected-source '$sha' --no-pm2"
+          sshpass -e ssh "${ssh_opts[@]}" "$dest" \
+            "sudo -n /usr/bin/python3 /opt/telegram-robot-leads/scripts/activate_project_only.py --pm2-home '$LEADS_PM2_HOME' --expected-source '$sha' --apply --confirm-telegram-only"
+          sshpass -e ssh "${ssh_opts[@]}" "$dest" \
+            "sudo -n /opt/telegram-robot-leads/.venv/bin/python /opt/telegram-robot-leads/scripts/leads_operational_report.py --expected-source '$sha' --no-pm2"

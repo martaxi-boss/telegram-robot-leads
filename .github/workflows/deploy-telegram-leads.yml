@@ -2,6 +2,11 @@ name: Telegram Leads isolated VPS installation
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/deploy-telegram-leads.yml"
+      - "scripts/**"
+      - "tests/**"
   push:
     branches:
       - main
@@ -32,6 +37,7 @@ jobs:
           bash -n scripts/telegram-robot-leads-status.sh
 
   install-only-telegram-leads:
+    if: github.event_name != 'pull_request'
     needs: certify
     runs-on: ubuntu-latest
     env:

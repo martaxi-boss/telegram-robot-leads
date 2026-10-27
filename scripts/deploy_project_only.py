@@ -10,7 +10,6 @@ A separately verified owner-scoped activation is required after staging.
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import os
 from pathlib import Path
@@ -18,7 +17,6 @@ import re
 import stat
 import tarfile
 import tempfile
-import time
 
 ROOT = Path("/opt/telegram-robot-leads")
 VAULT = Path("/root/project-secrets/telegram-robot-leads")
@@ -31,6 +29,7 @@ RUNTIME_FILES = (
     "scripts/leads_operational_report.py",
     "scripts/operation_policy.py",
     "scripts/organic_growth.py",
+    "scripts/activate_project_only.py",
     "scripts/project_hygiene.py",
     "scripts/safe_runtime.py",
     "scripts/telegram-robot-leads-status.sh",
@@ -196,7 +195,7 @@ def install(
         if old_content is None:
             continue
         destination = backup_dir / rel
-        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         _atomic_write(destination, old_content)
 
     applied: list[str] = []

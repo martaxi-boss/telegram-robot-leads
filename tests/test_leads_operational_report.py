@@ -251,5 +251,68 @@ class OperationalReportTests(unittest.TestCase):
             self.assertEqual(report.main(), 0)
         query.assert_called_once_with()
 
+    def test_growth_readiness_explains_why_zero_does_not_mean_a_network_error(self):
+        result = self.build(expected_sha="b" * 40)
+        self.assertEqual(result["organic_growth_model"]["status"], "NOT_CONFIGURED")
+        self.assertIn(
+            "NO_APPROVED_USERS_IN_DIRECT_ADD_QUEUE", result["readiness_indicators"]
+        )
+        self.assertIn(
+            "ORGANIC_GROWTH_MODEL_NOT_CONFIGURED", result["readiness_indicators"]
+        )
+        self.assertIn(
+            "PRIVATE_APPLICATION_CREDENTIALS_NOT_CONFIGURED", result["readiness_indicators"]
+        )
+        self.assertIn(
+            "INSTALLED_SOURCE_DIFFERS_FROM_EXPECTED", result["readiness_indicators"]
+        )
+
+    def test_growth_model_config_readiness_does_not_leak_channel_handle(self):
+        config = self.vault / "growth_model.json"
+        config.write_text(json.dumps({
+            "schema": 1,
+            "target_group": "@iptvpncode",
+            "approve_join_requests": True,
+            "owned_channel": "@PrivateOwnedChannel",
+            "publish_in_owned_channel": True,
+            "publisher_account": 1,
+        }), encoding="utf-8")
+        config.chmod(0o600)
+        result = self.build()
+        self.assertEqual(
+            result["organic_growth_model"]["status"],
+            "CONFIGURED_NOT_ONLINE_VERIFIED",
+        )
+        self.assertNotIn("@PrivateOwnedChannel", json.dumps(result))
+        self.assertNotIn(
+            "ORGANIC_GROWTH_MODEL_NOT_CONFIGURED", result["readiness_indicators"]
+        )
+
+    def test_supervisor_growth_counters_are_readonly_and_redacted(self):
+        self.events.write_text(json.dumps({
+            "ts": int(self.now) - 2,
+            "event": {
+                "kind": "cycle",
+                "group_actions": [],
+                "member_actions": [],
+                "blocked": [],
+                "organic_growth": {
+                    "join_requests": {
+                        "status": "APPROVED_REQUEST", "user_id": 222222
+                    },
+                    "owned_promotion": {
+                        "status": "POSTED", "channel": "@SecretOwnedChannel"
+                    },
+                },
+            },
+        }) + "\n", encoding="utf-8")
+        outcome = self.build()
+        self.assertEqual(outcome["supervisor"]["approvals_in_last_cycle"], 1)
+        self.assertEqual(outcome["supervisor"]["owned_posts_in_last_cycle"], 1)
+        self.assertEqual(outcome["supervisor"]["join_request_status"], "APPROVED_REQUEST")
+        self.assertNotIn("222222", json.dumps(outcome))
+        self.assertNotIn("@SecretOwnedChannel", json.dumps(outcome))
+
+
 if __name__ == "__main__":
     unittest.main()

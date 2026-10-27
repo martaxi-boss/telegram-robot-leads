@@ -235,18 +235,18 @@ class OperationalReportTests(unittest.TestCase):
 
     def test_report_cli_skips_pm2_by_default(self):
         import io
-        with patch.object(report, "read_pm2", side_effect=AssertionError("PM2 invoked")), \\
-             patch.object(report, "build_report", return_value={"status": "OFFLINE_ONLY"}) as build, \\
-             patch("sys.argv", ["leads_operational_report.py"]), \\
+        with patch.object(report, "read_pm2", side_effect=AssertionError("PM2 invoked")), \
+             patch.object(report, "build_report", return_value={"status": "OFFLINE_ONLY"}) as build, \
+             patch("sys.argv", ["leads_operational_report.py"]), \
              patch("sys.stdout", new_callable=io.StringIO):
             self.assertEqual(report.main(), 0)
         self.assertIsNone(build.call_args.kwargs["pm2_records"])
 
     def test_report_cli_queries_pm2_only_when_explicitly_requested(self):
         import io
-        with patch.object(report, "read_pm2", return_value=([], None)) as query, \\
-             patch.object(report, "build_report", return_value={"status": "NOT_LIVE_VERIFIED"}), \\
-             patch("sys.argv", ["leads_operational_report.py", "--with-pm2"]), \\
+        with patch.object(report, "read_pm2", return_value=([], None)) as query, \
+             patch.object(report, "build_report", return_value={"status": "NOT_LIVE_VERIFIED"}), \
+             patch("sys.argv", ["leads_operational_report.py", "--with-pm2"]), \
              patch("sys.stdout", new_callable=io.StringIO):
             self.assertEqual(report.main(), 0)
         query.assert_called_once_with()

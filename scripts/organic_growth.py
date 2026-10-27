@@ -162,17 +162,28 @@ async def promote_owned_channel(
         return _result("ACCOUNT_BLOCKED")
     previous = state["owned_promotion"].get(channel.casefold())
     day = _day(now, tz)
-    if isinstance(previous, dict):
-        if previous.get("status") == "pending":
-            return _result("PENDING_MANUAL_RECONCILIATION")
-        if previous.get("day") == day and previous.get("status") == "posted":
-            return _result("ALREADY_POSTED_TODAY")
-        if not isinstance(previous.get("day"), str) or previous.get("day") > day:
+    if previous is not None:
+        if (not isinstance(previous, dict)
+                or previous.get("status") not in {"preflight", "pending", "posted"}
+                or not isinstance(previous.get("day"), str)
+                or previous["day"] > day):
             raise PolicyBlocked("owned_promotion_state_invalid")
+        if previous["status"] == "pending":
+            return _result("PENDING_MANUAL_RECONCILIATION")
+        if previous["day"] == day and previous["status"] == "posted":
+            return _result("ALREADY_POSTED_TODAY")
+        if previous["day"] == day and previous["status"] == "preflight":
+            return _result("PREFLIGHT_ALREADY_ATTEMPTED_TODAY")
     last_action = float(state["accounts"][str(account_number)].get("last_action") or 0)
     if last_action and now - last_action < MIN_INTERVAL_SECONDS:
         return _result("ACCOUNT_INTERVAL")
 
+    # One preflight per day. In particular, missing admin rights must never
+    # cause repeated Telegram queries every minute.
+    state["owned_promotion"][channel.casefold()] = {
+        "day": day, "status": "preflight", "account": account_number
+    }
+    persist(state)
     client = await connect(config, account_number)
     try:
         entity = await asyncio.wait_for(client.get_entity(channel), timeout=20)
@@ -249,6 +260,10 @@ async def approve_pending_join_request(
         return _result("POLICY_DEFERRED")
     # Account 1 is the designated intake operator. Never switch accounts
     # on account restrictions to bypass Telegram's safeguards.
+    # Mark the read attempt BEFORE the Telegram preflight. Permission/network
+    # failures therefore receive a bounded 30-minute cooldown.
+    state["join_request_last_scan"] = int(now)
+    persist(state)
     client = await connect(config, 1)
     try:
         group = await asyncio.wait_for(client.get_entity(config["group"]), timeout=20)
@@ -280,8 +295,6 @@ async def approve_pending_join_request(
             getattr(u, "id", None): u for u in users
             if type(getattr(u, "id", None)) is int
         }
-        state["join_request_last_scan"] = int(now)
-        persist(state)
         for request in importers:
             if getattr(request, "requested", False) is not True:
                 continue

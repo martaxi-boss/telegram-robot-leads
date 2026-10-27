@@ -153,7 +153,7 @@ class OrganicGrowthTests(unittest.TestCase):
         # JSON copy proves the durable pre-request record was persisted.
         self.snapshots.append(json.loads(json.dumps(state)))
 
-    def run(self, method, model, client, *, now=NOW):
+    def execute(self, method, model, client, *, now=NOW):
         connector = AsyncMock(return_value=client)
         return asyncio.run(method(
             self.config, model, self.state, self.persist, connector, now=now,
@@ -176,7 +176,7 @@ class OrganicGrowthTests(unittest.TestCase):
     def test_owner_channel_promotes_link_once_per_day(self):
         model = configured()
         first = FakeClient(channel_owner=True)
-        result = self.run(growth.promote_owned_channel, model, first)
+        result = self.execute(growth.promote_owned_channel, model, first)
         self.assertEqual(result["status"], "POSTED")
         self.assertEqual(len(first.messages), 1)
         self.assertIn("https://t.me/iptvpncode", first.messages[0])
@@ -186,7 +186,7 @@ class OrganicGrowthTests(unittest.TestCase):
         self.assertEqual(self.snapshots[-1]["owned_promotion"][CHANNEL]["status"], "posted")
         second = FakeClient(channel_owner=True)
         self.assertEqual(
-            self.run(growth.promote_owned_channel, model, second)["status"],
+            self.execute(growth.promote_owned_channel, model, second)["status"],
             "ALREADY_POSTED_TODAY",
         )
         self.assertFalse(second.calls)
@@ -195,11 +195,11 @@ class OrganicGrowthTests(unittest.TestCase):
         model = configured()
         first = FakeClient(channel_owner=False)
         with self.assertRaisesRegex(growth.ProbeBlocked, "post_rights"):
-            self.run(growth.promote_owned_channel, model, first)
+            self.execute(growth.promote_owned_channel, model, first)
         self.assertEqual(first.messages, [])
         second = FakeClient(channel_owner=True)
         self.assertEqual(
-            self.run(growth.promote_owned_channel, model, second)["status"],
+            self.execute(growth.promote_owned_channel, model, second)["status"],
             "PREFLIGHT_ALREADY_ATTEMPTED_TODAY",
         )
         self.assertEqual(second.calls, [])
@@ -208,13 +208,13 @@ class OrganicGrowthTests(unittest.TestCase):
         model = configured()
         first = FakeClient(send_result=SimpleNamespace(id=None))
         with self.assertRaisesRegex(PolicyBlocked, "manual_review"):
-            self.run(growth.promote_owned_channel, model, first)
+            self.execute(growth.promote_owned_channel, model, first)
         self.assertEqual(
             self.state["owned_promotion"][CHANNEL]["status"], "pending"
         )
         second = FakeClient()
         self.assertEqual(
-            self.run(growth.promote_owned_channel, model, second)["status"],
+            self.execute(growth.promote_owned_channel, model, second)["status"],
             "PENDING_MANUAL_RECONCILIATION",
         )
         self.assertEqual(second.calls, [])
@@ -223,7 +223,7 @@ class OrganicGrowthTests(unittest.TestCase):
         model = configured()
         first = FakeClient(pending=[501])
         with patch.object(growth.utils, "get_input_user", return_value=object()) as conversion:
-            result = self.run(growth.approve_pending_join_request, model, first)
+            result = self.execute(growth.approve_pending_join_request, model, first)
         conversion.assert_called_once()
         self.assertEqual(result, {"status": "APPROVED_REQUEST", "approvals_accepted": 1})
         self.assertIn(("get_entity", TARGET), first.calls)
@@ -238,7 +238,7 @@ class OrganicGrowthTests(unittest.TestCase):
     def test_no_pending_join_requests_is_a_real_zero_not_an_error(self):
         model = configured()
         client = FakeClient(pending=[])
-        result = self.run(growth.approve_pending_join_request, model, client)
+        result = self.execute(growth.approve_pending_join_request, model, client)
         self.assertEqual(result["status"], "NO_PENDING_REQUESTS")
         self.assertEqual(self.state["accounts"]["1"]["join_request_approvals"], 0)
         self.assertEqual(len([c for c in client.calls if c[0] == "rpc"]), 1)
@@ -247,10 +247,10 @@ class OrganicGrowthTests(unittest.TestCase):
         model = configured()
         client = FakeClient(group_admin=False, pending=[501])
         with self.assertRaisesRegex(growth.ProbeBlocked, "admin_permission"):
-            self.run(growth.approve_pending_join_request, model, client)
+            self.execute(growth.approve_pending_join_request, model, client)
         other = FakeClient(pending=[501])
         self.assertEqual(
-            self.run(growth.approve_pending_join_request, model, other)["status"],
+            self.execute(growth.approve_pending_join_request, model, other)["status"],
             "NEXT_SCAN_NOT_DUE",
         )
         self.assertEqual(other.calls, [])
@@ -260,12 +260,12 @@ class OrganicGrowthTests(unittest.TestCase):
         client = FakeClient(pending=[501], response=SimpleNamespace(updates=None))
         with patch.object(growth.utils, "get_input_user", return_value=object()):
             with self.assertRaisesRegex(PolicyBlocked, "manual_review"):
-                self.run(growth.approve_pending_join_request, model, client)
+                self.execute(growth.approve_pending_join_request, model, client)
         self.assertIn("501", self.state["pending_join_requests"])
         self.assertEqual(self.state["accounts"]["1"]["join_request_approvals"], 0)
         second = FakeClient(pending=[501])
         self.assertEqual(
-            self.run(growth.approve_pending_join_request, model, second)["status"],
+            self.execute(growth.approve_pending_join_request, model, second)["status"],
             "PENDING_MANUAL_RECONCILIATION",
         )
         self.assertEqual(second.calls, [])

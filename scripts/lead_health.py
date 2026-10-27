@@ -231,10 +231,16 @@ def inspect(root: Path, pm2_records: list[dict[str, Any]], pm2_error: str | None
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--with-pm2", action="store_true",
+                        help="Explicitly query PM2 (can start a daemon in this user's namespace)")
     parser.add_argument("--no-pm2", action="store_true",
-                        help="Skip PM2 commands for a guaranteed process-neutral vault inventory")
+                        help="Compatibility option; PM2 is skipped by default")
     args = parser.parse_args()
-    pm2, error = ([], "PM2 deliberately not queried") if args.no_pm2 else read_pm2()
+    if args.with_pm2 and args.no_pm2:
+        parser.error("--with-pm2 and --no-pm2 are mutually exclusive")
+    # A seemingly read-only 'pm2 jlist' can auto-start a PM2 daemon.
+    # Never contact PM2 implicitly, especially from another service account.
+    pm2, error = read_pm2() if args.with_pm2 else ([], "PM2 deliberately not queried")
     print(json.dumps(inspect(args.root, pm2, error), ensure_ascii=False, indent=2))
     return 0
 

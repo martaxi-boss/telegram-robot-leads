@@ -19,6 +19,7 @@ import time
 from typing import Any
 
 from lead_health import PROCESS_NAME, read_pm2
+from organic_growth import preview as growth_preview
 from operation_policy import PolicyBlocked, load_state
 from public_group_discovery import DEFAULT_CATALOG, DiscoveryBlocked, read_catalog, public_join_url
 from safe_runtime import (
@@ -126,6 +127,19 @@ def _action_queue(vault: Path) -> dict[str, Any]:
         return {"status": "BLOCKED", "reason": _redacted_reason(str(exc))}
 
 
+def _organic_model(vault: Path, session_info: dict[str, Any]) -> dict[str, Any]:
+    """Return a redacted offline readiness signal; never contact Telegram."""
+    url = session_info.get("public_join_url")
+    if not isinstance(url, str) or not url.startswith("https://t.me/"):
+        return {"status": "TARGET_NOT_VERIFIED", "enabled": False}
+    target = "@" + url.rsplit("/", 1)[-1]
+    try:
+        return growth_preview(vault, target)
+    except (ProbeBlocked, OSError, ValueError, UnicodeError) as exc:
+        return {"status": "BLOCKED", "reason": _redacted_reason(str(exc)),
+                "enabled": False}
+
+
 def _discovery(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"status": "NOT_RUN", "public_groups": 0, "last_attempt_day": None}
@@ -158,6 +172,16 @@ def _operation_state(path: Path) -> dict[str, Any]:
             "pending_group_actions": len(state.get("pending_group_actions", {})),
             "member_additions_today_authorized": sum(
                 state["accounts"][str(i)]["member_adds"] for i in (1, 2)),
+            "join_request_approvals_today": sum(
+                state["accounts"][str(i)].get("join_request_approvals", 0)
+                for i in (1, 2)
+            ),
+            "pending_join_request_outcomes": len(
+                state.get("pending_join_requests", {})
+            ),
+            "owned_channel_promotion_records": len(
+                state.get("owned_promotion", {})
+            ),
         }
     except (PolicyBlocked, OSError, ValueError) as exc:
         return {"status": "BLOCKED", "reason": _redacted_reason(str(exc))}
@@ -210,6 +234,24 @@ def _events(path: Path, now: float) -> dict[str, Any]:
                     len(payload.get("blocked", []))
                     if isinstance(payload.get("blocked"), list) else None
                 )
+                growth = payload.get("organic_growth")
+                if isinstance(growth, dict):
+                    owned = growth.get("owned_promotion")
+                    intake = growth.get("join_requests")
+                    result["owned_promotion_status"] = _redacted_reason(
+                        owned.get("status") if isinstance(owned, dict) else None
+                    )
+                    result["join_request_status"] = _redacted_reason(
+                        intake.get("status") if isinstance(intake, dict) else None
+                    )
+                    result["owned_posts_in_last_cycle"] = int(
+                        isinstance(owned, dict)
+                        and owned.get("status") == "POSTED"
+                    )
+                    result["approvals_in_last_cycle"] = int(
+                        isinstance(intake, dict)
+                        and intake.get("status") == "APPROVED_REQUEST"
+                    )
             elif kind == "runtime_blocked":
                 result["reason"] = _redacted_reason(payload.get("reason"))
             return result
@@ -249,6 +291,7 @@ def build_report(
     source = _source(checkout, expected_sha)
     accounts = _vault(vault)
     action_queue = _action_queue(vault)
+    growth_model = _organic_model(vault, accounts)
     catalog = _discovery(catalog_path)
     operation = _operation_state(state_path)
     event = _events(events_path, current)
@@ -275,6 +318,24 @@ def build_report(
         result = "OFFLINE_ONLY"
     else:
         result = "NOT_LIVE_VERIFIED"
+    # These are diagnostic indicators, not a claim about lifetime membership
+    # or a request to bypass missing configuration.
+    readiness = []
+    if source.get("matches_expected") is False:
+        readiness.append("INSTALLED_SOURCE_DIFFERS_FROM_EXPECTED")
+    if accounts.get("api_source") == "published_android_fallback":
+        readiness.append("PRIVATE_APPLICATION_CREDENTIALS_NOT_CONFIGURED")
+    if action_queue.get("member_queue_status") == "EMPTY":
+        readiness.append("NO_APPROVED_USERS_IN_DIRECT_ADD_QUEUE")
+    if growth_model.get("status") == "NOT_CONFIGURED":
+        readiness.append("ORGANIC_GROWTH_MODEL_NOT_CONFIGURED")
+    if pm2.get("status") != "ONLINE":
+        readiness.append("PROJECT_PM2_NOT_VERIFIED")
+    if event.get("event_kind") == "cycle" and event.get(
+        "authorized_member_action_count"
+    ) == 0:
+        readiness.append("LAST_CYCLE_NO_DIRECT_MEMBER_ACTIONS")
+
     return {
         "project": "telegram-robot-leads",
         "read_only": True,
@@ -286,6 +347,8 @@ def build_report(
         "source": source,
         "sessions": accounts,
         "action_queue": action_queue,
+        "organic_growth_model": growth_model,
+        "readiness_indicators": readiness,
         "pm2": pm2,
         "public_discovery": catalog,
         "operation_state": operation,

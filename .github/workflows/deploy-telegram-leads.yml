@@ -97,7 +97,7 @@ jobs:
           upload="/opt/telegram-robot-leads/.telegram-leads-release-$sha.tgz"
           installer="/opt/telegram-robot-leads/.telegram-leads-installer-$sha.py"
           ssh "${ssh_flags[@]}" "$dest" \
-            "test \"$(id -u)\" = 0 && test -d /opt/telegram-robot-leads && test ! -L /opt/telegram-robot-leads && test -d /root/project-secrets/telegram-robot-leads && test ! -e '$upload' && test ! -L '$upload' && test ! -e '$installer' && test ! -L '$installer'"
+            "test \"\$(id -u)\" = 0 && test -d /opt/telegram-robot-leads && test ! -L /opt/telegram-robot-leads && test -d /root/project-secrets/telegram-robot-leads && test ! -e '$upload' && test ! -L '$upload' && test ! -e '$installer' && test ! -L '$installer'"
           scp "${scp_flags[@]}" "$bundle" "$dest:$upload"
           scp "${scp_flags[@]}" scripts/deploy_project_only.py "$dest:$installer"
 

@@ -372,7 +372,7 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     path = _state_path()
     state = load_state(path, os.environ.get("TELEGRAM_TZ", "Europe/Lisbon"))
     report = {"group_actions": [], "member_actions": [], "blocked": []}
-    model = read_model(vault, config["group"])
+    model = read_model(vault, config.get("group", ""))
 
     discovery_enabled = os.environ.get(
         "TELEGRAM_PUBLIC_DISCOVERY_ENABLED", "0"

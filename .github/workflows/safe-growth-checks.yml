@@ -48,6 +48,8 @@ jobs:
           scripts/safe_runtime.py
           scripts/organic_growth.py
           scripts/project_hygiene.py
+          scripts/deploy_project_only.py
+          scripts/activate_project_only.py
           scripts/public_group_discovery.py
           scripts/public_group_review.py
           scripts/leads_operational_report.py

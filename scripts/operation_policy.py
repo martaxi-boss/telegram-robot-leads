@@ -41,6 +41,7 @@ def _new_account() -> dict:
     return {
         "group_joins": 0,
         "member_adds": 0,
+        "join_request_approvals": 0,
         "last_action": 0,
         "blocked": False,
         "reason": None,
@@ -57,6 +58,10 @@ def empty_state(tz_name: str = DEFAULT_TZ) -> dict:
         "pending_member_ids": {},
         "pending_group_actions": {},
         "pending_member_actions": {},
+        "pending_join_requests": {},
+        "approved_join_requests_done": {},
+        "owned_promotion": {},
+        "join_request_last_scan": 0,
     }
 
 
@@ -85,11 +90,18 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
     if not isinstance(data, dict):
         raise PolicyBlocked("state_invalid")
     for key in ("joined_groups", "approved_users_done", "approved_user_ids_done",
-                "pending_group_actions", "pending_member_actions", "pending_member_ids"):
+                "pending_group_actions", "pending_member_actions", "pending_member_ids",
+                "pending_join_requests", "approved_join_requests_done", "owned_promotion"):
         if key not in data:
             data[key] = {}
         if not isinstance(data[key], dict):
             raise PolicyBlocked("state_mapping_invalid")
+    # Old valid releases lack these fields; default them without resetting old usage.
+    if "join_request_last_scan" not in data:
+        data["join_request_last_scan"] = 0
+    if (type(data["join_request_last_scan"]) is not int
+            or data["join_request_last_scan"] < 0):
+        raise PolicyBlocked("join_request_scan_invalid")
     accounts = data.get("accounts")
     if not isinstance(accounts, dict):
         raise PolicyBlocked("state_accounts_invalid")
@@ -97,7 +109,9 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
         account = accounts.get(key)
         if not isinstance(account, dict):
             raise PolicyBlocked("state_account_invalid")
-        for field in ("group_joins", "member_adds", "last_action"):
+        if "join_request_approvals" not in account:
+            account["join_request_approvals"] = 0
+        for field in ("group_joins", "member_adds", "join_request_approvals", "last_action"):
             value = account.get(field)
             if (type(value) is not int or value < 0) and not (field == "last_action" and type(value) is float and math.isfinite(value) and value >= 0):
                 raise PolicyBlocked("state_account_invalid")
@@ -123,8 +137,10 @@ def load_state(path: Path, tz_name: str = DEFAULT_TZ) -> dict:
         previous = data
         data = empty_state(tz_name)
         for key in ("joined_groups", "approved_users_done", "approved_user_ids_done",
-                    "pending_group_actions", "pending_member_actions", "pending_member_ids"):
+                    "pending_group_actions", "pending_member_actions", "pending_member_ids",
+                    "pending_join_requests", "approved_join_requests_done", "owned_promotion"):
             data[key] = previous[key]
+        data["join_request_last_scan"] = previous["join_request_last_scan"]
         for key in ("1", "2"):
             prior = previous["accounts"][key]
             data["accounts"][key]["blocked"] = prior["blocked"]
@@ -201,20 +217,31 @@ def check_action(state: dict, account_number: int, action_type: str, now: float 
             raise PolicyDeferred(f"account_{account_number}_group_daily_limit")
         if project_total(state, "group_joins") >= MAX_GROUP_JOINS_PROJECT_DAY:
             raise PolicyDeferred("project_group_daily_limit")
-    elif action_type == "member_add":
-        if int(account.get("member_adds", 0)) >= MAX_MEMBER_ADDS_PER_ACCOUNT_DAY:
+    elif action_type in ("member_add", "join_request_approval"):
+        # One shared activity budget: approving requested members must not
+        # silently expand the already-approved 10/account and 20/project caps.
+        member_count = (
+            int(account.get("member_adds", 0))
+            + int(account.get("join_request_approvals", 0))
+        )
+        if member_count >= MAX_MEMBER_ADDS_PER_ACCOUNT_DAY:
             raise PolicyDeferred(f"account_{account_number}_member_daily_limit")
-        if project_total(state, "member_adds") >= MAX_MEMBER_ADDS_PROJECT_DAY:
+        project_count = (
+            project_total(state, "member_adds")
+            + project_total(state, "join_request_approvals")
+        )
+        if project_count >= MAX_MEMBER_ADDS_PROJECT_DAY:
             raise PolicyDeferred("project_member_daily_limit")
     else:
         raise PolicyBlocked("action_type_invalid")
 
     current = time.time() if now is None else now
-    if action_type == "member_add":
+    if action_type in ("member_add", "join_request_approval"):
         local_hour = datetime.fromtimestamp(current, ZoneInfo(DEFAULT_TZ)).hour
         if not MEMBER_ACTIVITY_START_HOUR <= local_hour < MEMBER_ACTIVITY_END_HOUR:
             raise PolicyDeferred("member_activity_window_08_22_portugal")
-        if int(account.get("member_adds", 0)) >= member_time_budget(
+        if (int(account.get("member_adds", 0))
+                + int(account.get("join_request_approvals", 0))) >= member_time_budget(
             account_number, now=current
         ):
             raise PolicyDeferred(f"account_{account_number}_member_day_distribution")
@@ -229,6 +256,10 @@ def record_success(state: dict, account_number: int, action_type: str, now: floa
         account["group_joins"] = int(account.get("group_joins", 0)) + 1
     elif action_type == "member_add":
         account["member_adds"] = int(account.get("member_adds", 0)) + 1
+    elif action_type == "join_request_approval":
+        account["join_request_approvals"] = (
+            int(account.get("join_request_approvals", 0)) + 1
+        )
     else:
         raise PolicyBlocked("action_type_invalid")
     account["last_action"] = int(time.time() if now is None else now)

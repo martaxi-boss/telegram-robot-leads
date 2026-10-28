@@ -8,6 +8,7 @@ unsolicited messages, account creation, automatic group joins, or mutations.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -16,7 +17,6 @@ import re
 import sqlite3
 import stat
 import sys
-import time
 import unicodedata
 from urllib.parse import quote
 
@@ -129,7 +129,7 @@ def campaign_snapshot(path: Path, *, now: datetime) -> dict:
     _private_db(path)
     uri = "file:" + quote(str(path.resolve()), safe="/") + "?mode=ro"
     try:
-        with sqlite3.connect(uri, uri=True, timeout=2) as db:
+        with closing(sqlite3.connect(uri, uri=True, timeout=2)) as db:
             db.execute("PRAGMA query_only=ON")
             required = {"events", "campaigns"}
             names = {row[0] for row in db.execute(

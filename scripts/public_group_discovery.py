@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import fcntl
 import json
 import os
@@ -29,6 +29,14 @@ DEFAULT_CATALOG = Path("/var/lib/telegram-robot-leads/public-groups.json")
 KEYWORDS_FILE = "discovery_keywords.txt"
 GROUP_NAME = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
 MAX_KEYWORDS = 6
+# Exactly two distinct public search phrases per day. The existing private
+# discovery_keywords.txt always overrides this project-specific default.
+DEFAULT_IPTV_TOPIC_PAIRS = (
+    ("iptv portugal", "iptv"),
+    ("streaming portugal", "tv online portugal"),
+    ("canais tv portugal", "televisao portuguesa"),
+)
+DEFAULT_IPTV_ROTATION_EPOCH = date(2026, 10, 28)
 MAX_RESULTS_PER_QUERY = 30
 MAX_CATALOG_GROUPS = 2500
 MAX_CATALOG_BYTES = 2 * 1024 * 1024
@@ -76,6 +84,25 @@ def select_keywords(vault: Path, target: str, supplied: list[str]) -> list[str]:
     if not keywords:
         raise DiscoveryBlocked("discovery_keywords_empty")
     return keywords
+
+
+def select_daily_keywords(vault: Path, target: str, day: str) -> list[str]:
+    """Rotate two IPTV search topics per Portugal day, never raise API volume.
+
+    Explicit private keywords preserve their own order and are not rotated.
+    A non-IPTV target still requires explicit private operator keywords.
+    """
+    if not isinstance(day, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        raise DiscoveryBlocked("discovery_day_invalid")
+    try:
+        today = date.fromisoformat(day)
+    except ValueError as exc:
+        raise DiscoveryBlocked("discovery_day_invalid") from exc
+    if _private_keywords(vault) is not None or "iptv" not in target.casefold():
+        return select_keywords(vault, target, [])
+    offset = (today - DEFAULT_IPTV_ROTATION_EPOCH).days
+    pair = DEFAULT_IPTV_TOPIC_PAIRS[offset % len(DEFAULT_IPTV_TOPIC_PAIRS)]
+    return select_keywords(vault, target, list(pair))
 
 
 def public_join_url(target: str) -> str:
@@ -263,8 +290,8 @@ async def discover_daily(config: dict, vault: Path, catalog_path: Path = DEFAULT
     Persist the attempt *before* contacting Telegram so restarts cannot create
     repeated automatic searches after timeouts or anti-abuse signals.
     """
-    keywords = select_keywords(vault, config["group"], [])
     stamp_day = day or datetime.now(ZoneInfo("Europe/Lisbon")).date().isoformat()
+    keywords = select_daily_keywords(vault, config["group"], stamp_day)
     with catalog_lock(catalog_path):
         catalog = read_catalog(catalog_path)
         if catalog.get("last_attempt_day") == stamp_day:
@@ -294,7 +321,9 @@ def main() -> int:
                              ensure_ascii=False))
             return 0
         config = inspect(args.vault)
-        queries = select_keywords(args.vault, config["group"], args.query)
+        today = datetime.now(ZoneInfo("Europe/Lisbon")).date().isoformat()
+    queries = (select_keywords(args.vault, config["group"], args.query)
+               if args.query else select_daily_keywords(args.vault, config["group"], today))
         if args.preview:
             print(json.dumps({"status": "READY_OFFLINE", "keywords": queries,
                               "voluntary_join_url": public_join_url(config["group"]),

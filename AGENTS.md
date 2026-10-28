@@ -7,6 +7,29 @@ This file is the repository-level agent entrypoint for `martaxi-boss/telegram-ro
 
 Repository evidence, accepted governance records, source, certification evidence and live GitHub state take precedence over chat assertions, stale checkpoints and static SHA references when determining current truth.
 
+## Canonical SSH / deployment ownership (owner decision, 2026-10-28)
+
+- **This repository owns application code and offline CI only.**
+  Keep `.github/workflows/safe-growth-checks.yml` for local tests.
+  Do **not** recreate `.github/workflows/deploy-telegram-leads.yml`
+  or introduce any other SSH/VPS deployment workflow here.
+- The **single existing deployment** is
+  `martaxi-boss/VPS/.github/workflows/telegram-leads-vps-stage-20261019.yml`.
+  Its existing `VPS_SSH_PASSWORD`, SSH user `ubuntu`, host identity pin
+  and permissions remain owned by the VPS repository.
+  Never copy, regenerate or require `TELEGRAM_LEADS_SSH_*` secrets.
+- Change or deploy **only Telegram Robot Leads** files and its one
+  verified PM2 worker; never affect unrelated projects, sessions,
+  vault contents, logs, state or backup data.
+- A Telegram repository push or green CI is **not** a VPS deployment.
+  The central workflow uses a pinned target SHA and expected-installed
+  SHA; check both, including the release file manifest, before any
+  newer version is promoted. Do not trigger/rewrite the VPS workflow
+  without separate authorization; report version drift rather than
+  claiming it was deployed.
+- The regression test `tests/test_deployment_route.py` enforces
+  the absence of a second SSH workflow in this repository.
+
 ## Supervisor / Auditor posture
 
 When the human explicitly asks an agent to act as **Supervisor**, **Auditor**, or **Supervisor/Auditor** for this project, the agent MUST adopt and retain this posture for that assignment:

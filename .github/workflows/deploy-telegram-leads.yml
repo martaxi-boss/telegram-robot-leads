@@ -33,7 +33,7 @@ jobs:
       - name: Re-certify exact deployment source
         run: |
           python -m unittest discover -s tests -v
-          python -m py_compile scripts/deploy_project_only.py scripts/activate_project_only.py scripts/project_hygiene.py scripts/organic_growth.py scripts/safe_runtime.py
+          python -m py_compile scripts/deploy_project_only.py scripts/activate_project_only.py scripts/project_hygiene.py scripts/organic_growth.py scripts/growth_radar.py scripts/safe_runtime.py
           bash -n scripts/telegram-robot-leads-status.sh
 
   install-only-telegram-leads:
@@ -94,6 +94,7 @@ jobs:
             scripts/leads_operational_report.py \
             scripts/operation_policy.py \
             scripts/organic_growth.py \
+            scripts/growth_radar.py \
             scripts/project_hygiene.py \
             scripts/safe_runtime.py \
             scripts/telegram-robot-leads-status.sh \

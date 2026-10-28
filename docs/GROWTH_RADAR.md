@@ -95,3 +95,21 @@ A validação GitHub Actions certifica apenas código e testes. Para afirmar
 que houve entradas reais no grupo, são necessários eventos `chat_member`
 ou equivalentes observados e um sistema de medição operacional. Nenhum
 resultado simulado pode substituir essas provas.
+
+## Estado de instalação verificado (28/10/2026)
+
+O Radar foi integrado no repositório Telegram pelo PR #38, no commit
+`5ade747d82066515bc0032ca53639b13670ccc36`, mas **ainda não foi
+comprovada a sua instalação na VPS**. A última instalação validada na
+VPS foi da versão `7c0ef8a1d9be5d18568a133bcfdb79e4e0bcd9aa`
+([execução central 40609597231](https://github.com/martaxi-boss/VPS/actions/runs/40609597231)).
+A presença do ficheiro Python no GitHub não significa que esteja no servidor.
+
+Para qualquer atualização, usar **exclusivamente** o workflow existente
+`martaxi-boss/VPS/.github/workflows/telegram-leads-vps-stage-20261019.yml`
+com a credencial SSH já configurada no repositório VPS. O pacote do
+workflow precisa de incluir `scripts/growth_radar.py`, e os parâmetros
+`TARGET_SHA` e `EXPECTED_INSTALLED` precisam de refletir os SHAs
+realmente verificados. Não criar novo workflow nem nova credencial SSH
+no repositório Telegram; consultar
+[`TELEGRAM_ONLY_INSTALLATION.md`](TELEGRAM_ONLY_INSTALLATION.md).

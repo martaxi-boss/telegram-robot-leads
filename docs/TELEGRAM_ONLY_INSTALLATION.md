@@ -29,34 +29,53 @@ Não criar um novo servidor, agente, processo PM2 ou sessão Telegram.
   ou para comandos globais de PM2.
 - GitHub CI prévio não certifica uma instalação live.
 
-## Caminho previsto — apenas GitHub Actions deste repositório
+## Via canónica — GitHub Actions central → SSH → VPS (28/10/2026)
 
-O workflow do projeto é .github/workflows/deploy-telegram-leads.yml.
-É executado depois do merge do novo workflow em main ou por workflow_dispatch.
-Uma PR pode certificar o código, mas **nunca** faz login SSH com secrets.
+**Existe uma única via de instalação remota: o workflow já existente no
+repositório `martaxi-boss/VPS`, em
+`.github/workflows/telegram-leads-vps-stage-20261019.yml`.**
+Esse workflow usa a credencial **já existente no repositório VPS**,
+`secrets.VPS_SSH_PASSWORD`, autentica com o utilizador SSH `ubuntu`
+e confirma a identidade ED25519 fixada da VPS antes de enviar código.
+Não criar, duplicar nem copiar passwords, chaves, secrets ou workflows
+SSH para o repositório Telegram. A credencial não é herdada por outros
+repositórios GitHub Actions.
 
-O workflow exige os seguintes Actions secrets pertencentes a
-**este repositório** (não os copiar de outro projeto sem autorização):
+Neste repositório, `.github/workflows/safe-growth-checks.yml` limita-se
+a testes locais sem SSH. O antigo
+`.github/workflows/deploy-telegram-leads.yml` foi removido: exigia
+`TELEGRAM_LEADS_SSH_HOST`, `TELEGRAM_LEADS_SSH_USER`,
+`TELEGRAM_LEADS_SSH_KEY` e `TELEGRAM_LEADS_SSH_KNOWN_HOSTS` que
+não estavam disponíveis neste repositório; os seus erros de
+GitHub Actions **não** eram falhas do PM2 ou da VPS.
 
-- TELEGRAM_LEADS_SSH_HOST: hostname ou IP da VPS.
-- TELEGRAM_LEADS_SSH_USER: utilizador SSH com acesso root validado.
-- TELEGRAM_LEADS_SSH_KEY: chave SSH privada com acesso já autorizado.
-- TELEGRAM_LEADS_SSH_KNOWN_HOSTS: pin SSH do host verificado.
-- TELEGRAM_LEADS_SSH_PORT: opcional, porta SSH (22 por defeito).
-- TELEGRAM_LEADS_PM2_HOME: opcional, diretório do daemon PM2 correto
-  (por exemplo, /root/.pm2, SOMENTE após verificação).
+**Prova real:** execução do workflow central
+[40609597231](https://github.com/martaxi-boss/VPS/actions/runs/40609597231),
+de 28/10/2026, 00:34 UTC. Certificou a origem
+`7c0ef8a1d9be5d18568a133bcfdb79e4e0bcd9aa`, a identidade SSH,
+higienização `APPLIED`, ativação `PROJECT_WORKER_RESTARTED`, duas
+sessões preservadas e PM2 `ONLINE`. O relatório **não** comprovou
+as duas contas autenticadas online nem novas adesões ao grupo.
 
-Não imprimir keys ou hashes da aplicação no Actions/logs.
-O workflow bloqueia se host, utilizador, chave ou known_hosts estiverem vazios.
+**Diferença de versões:** a instalação verificada na VPS continua no
+SHA `7c0ef8a1d9be5d18568a133bcfdb79e4e0bcd9aa`; o merge do
+Radar de Crescimento (#38) pôs a `main` do Telegram no SHA
+`5ade747d82066515bc0032ca53639b13670ccc36`. CI verde não
+significa que o Radar já esteja instalado na VPS.
 
-A instalação compara exatamente o commit anterior auditado. Se o commit
-da VPS mudou entretanto, bloqueia: NÃO reiniciar, forçar o marcador,
-apagar o estado, nem substituir a versão mais recente.
-O instalador modifica apenas uma lista fixa de ficheiros de código dentro
-de /opt/telegram-robot-leads. A cópia de segurança fica dentro da pasta
-do projeto, em .telegram-leads-release-backups (NÃO apagar).
-As duas sessões, .env, accounts.json, bases de dados, state, journals e
-o ambiente virtual não são apagados nem substituídos.
+Antes de um *novo* deploy, o **mesmo workflow central** terá de ser
+atualizado e validado, com `TARGET_SHA` igual ao novo commit aprovado,
+`EXPECTED_INSTALLED` igual ao SHA realmente instalado, e o ficheiro
+`scripts/growth_radar.py` incluído tanto nos testes como no pacote
+de runtime. O workflow central está atualmente fixado na versão antiga.
+**Não alterar o repositório VPS a partir deste projeto sem autorização**
+e não tentar contornar a verificação de versão do instalador.
+
+A instalação verifica paths e versões, modifica apenas os ficheiros
+permitidos em `/opt/telegram-robot-leads` e conserva backups privados
+em `.telegram-leads-release-backups`. As sessões, `.env`,
+`accounts.json`, bases de dados, estado, journals e `.venv` são
+preservados.
 
 ## Higienização
 
@@ -77,29 +96,29 @@ Comando de aplicação (após autorização explícita do operador):
 
 ## Ativação, sem PM2 global
 
-O instalador reporta STAGED_NOT_ACTIVATED. O workflow só tenta reiniciar
-o worker único **se** TELEGRAM_LEADS_PM2_HOME estiver configurado com o
-diretório de um daemon PM2 existente e o processo tiver um script e um cwd
-exatamente iguais aos do Telegram Robot Leads.
+O workflow central verifica que existe **exatamente um** worker com nome
+`telegram-robot-leads`, cwd `/opt/telegram-robot-leads`, script
+`/opt/telegram-robot-leads/main.py` e PM2 do proprietário correto
+(`/root/.pm2`). Só então o script de ativação reinicia esse worker.
+Nenhum `pm2 restart all`, `pm2 delete`, `pm2 start` ou criação de
+novo daemon é autorizada. Se o estado for divergente, bloquear.
 
-Se o worker estiver em falta, duplicado, noutro cwd, ou o PM2 for
-desconhecido, o estado é BLOCKED e não há reinícios globais, nem pm2 start,
-pm2 delete, nem alterações a outros trabalhadores.
-O script ativador não considera PM2 ONLINE prova de sucesso Telegram.
-
-O modelo orgânico do novo código não entra em ação se não existir no
-cofre do projeto um growth_model.json privado e validado. Nenhum
-nome de canal fictício deve ser instalado em produção.
+O código só ativa o modelo orgânico se existir um
+`growth_model.json` privado, válido e autorizado no cofre. PM2
+`ONLINE` não demonstra autorização, ligação das contas Telegram ou
+novas entradas de membros no grupo.
 
 ## Critérios de fecho
 
-Uma instalação é confirmada somente com: workflow SUCCESS com HEAD exato
-de main, SHA da versão instalada verificada depois da cópia, duas sessões
-originais preservadas, limpeza de caches concluída e reavaliação da versão
-na VPS. Uma ativação requer adicionalmente prova do processo único correto,
-ambas as contas autenticadas online e operação de adesão voluntária
-observada com contadores de resultados, não apenas testes de mocks.
+Só declarar o deploy concluído quando o **workflow central da VPS**
+terminar com `SUCCESS` e devolver prova do SHA exato instalado,
+identidade SSH fixada, duas sessões preservadas, higienização limitada
+a este projeto, worker único verificado e relatório pós-ativação.
+O SHA da `main` do Telegram e o SHA instalado são verificações
+independentes, não podem ser confundidos.
 
-Se faltarem SSH secrets, acesso à VPS, PM2_HOME ou permissões de Telegram,
-informar que a instalação/ativação NÃO está concluída, com código de
-bloqueio. Não inferir sucesso com base na PR ou no commit.
+O relatório operacional deve separar os estados PM2 e Telethon.
+A confirmação de membros adicionados exige eventos reais e
+verificáveis; testes, modelos e estados `ONLINE` não a substituem.
+Não forçar marcadores, não apagar estado, não trocar secrets e
+não reiniciar serviços de outros projetos perante bloqueios.

@@ -63,6 +63,60 @@ class PublicDiscoveryTests(unittest.TestCase):
             ["iptv portugal", "iptv"],
         )
 
+    def test_daily_iptv_rotation_covers_six_topics_with_two_queries_per_day(self):
+        dates = ["2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31"]
+        observed = [
+            discovery.select_daily_keywords(self.vault, "@iptvpncode", day)
+            for day in dates
+        ]
+        self.assertEqual([len(topics) for topics in observed], [2, 2, 2, 2])
+        self.assertEqual(observed[0], ["iptv portugal", "iptv"])
+        self.assertEqual(observed[0], observed[3])
+        self.assertEqual(len(set(observed[0] + observed[1] + observed[2])), 6)
+        self.assertEqual(
+            [topics for pair in observed[:3] for topics in pair],
+            [topic for pair in discovery.DEFAULT_IPTV_TOPIC_PAIRS for topic in pair],
+        )
+
+    def test_private_keywords_take_priority_over_daily_defaults(self):
+        terms = self.vault / discovery.KEYWORDS_FILE
+        terms.write_text("IPTV PT\nstreaming tv\n", encoding="utf-8")
+        terms.chmod(0o600)
+        for day in ["2026-10-28", "2026-10-29", "2026-10-30"]:
+            self.assertEqual(
+                discovery.select_daily_keywords(self.vault, "@iptvpncode", day),
+                ["IPTV PT", "streaming tv"],
+            )
+        terms.chmod(0o644)
+        with self.assertRaisesRegex(discovery.DiscoveryBlocked, "permissions"):
+            discovery.select_daily_keywords(self.vault, "@iptvpncode", "2026-10-29")
+
+    def test_daily_rotation_rejects_invalid_dates_and_unrelated_targets(self):
+        for invalid_day in ["20261028", "2026-02-30", "2026-10-28extra", "", None]:
+            with self.subTest(day=invalid_day):
+                with self.assertRaisesRegex(discovery.DiscoveryBlocked, "day_invalid"):
+                    discovery.select_daily_keywords(self.vault, "@iptvpncode", invalid_day)
+        with self.assertRaisesRegex(discovery.DiscoveryBlocked, "keywords_missing"):
+            discovery.select_daily_keywords(self.vault, "@unrelated", "2026-10-28")
+
+    def test_daily_discovery_uses_rotated_pair_in_real_search_path(self):
+        expected = discovery.select_daily_keywords(
+            self.vault, "@iptvpncode", "2026-10-29"
+        )
+        self.assertNotEqual(expected, ["iptv portugal", "iptv"])
+        fake = FakeClient([
+            SimpleNamespace(chats=[chat("BroadcastIPTV")]),
+            SimpleNamespace(chats=[chat("AnotherIptv")]),
+        ])
+        report = asyncio.run(discovery.discover_daily(
+            self.config, self.vault, self.path,
+            client_factory=lambda *a: fake, delay_seconds=0, day="2026-10-29",
+        ))
+        self.assertEqual(report["queries"], 2)
+        self.assertEqual([request.q for request in fake.calls], expected)
+        self.assertEqual(report["new_public_groups"], 2)
+        self.assertTrue(fake.disconnected)
+
     def test_custom_private_keywords_are_deduplicated(self):
         file = self.vault / discovery.KEYWORDS_FILE
         file.write_text("# Public topics\nIPTV PT\niptv pt\nTV online\n", encoding="utf-8")

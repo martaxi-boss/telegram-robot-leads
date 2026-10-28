@@ -19,12 +19,19 @@ terceiros ao grupo do proprietário. A adesão tem de ser voluntária.
   com permissões 0600 e escrita atómica
 - Temas opcionais: discovery_keywords.txt no cofre, privado com modo 0600,
   uma expressão por linha, máximo seis, comentários iniciados por #
-- Sem ficheiro de temas, e só para o grupo de destino atual IPTV, usam-se
-  automaticamente os temas iptv portugal e iptv
+- Sem ficheiro de temas, e só para o grupo de destino IPTV, a descoberta
+  usa **duas expressões por dia**, alternando três pares:
+  `iptv portugal` / `iptv`, `streaming portugal` / `tv online portugal`,
+  `canais tv portugal` / `televisao portuguesa`. A rotação segue o dia
+  civil de Portugal e repete o ciclo após três dias. Não acrescenta contas,
+  nem aumenta as duas pesquisas diárias por omissão.
+- `discovery_keywords.txt` privado continua a prevalecer sobre a rotação,
+  sem alterações no respetivo conteúdo, limites ou ordem.
 - A pesquisa pública devolve até 30 resultados por termo; o programa só
   conserva o nome público, título, URL e termo associado de supergrupos
 - No modo automático há no máximo uma tentativa por dia civil em
-  Europe/Lisbon; uma falha não gera repetições infinitas
+  Europe/Lisbon; uma falha não gera repetições infinitas. Os pares
+  seguintes só serão pesquisados quando chegar o respetivo dia.
 - As restrições de conta/rate limit do Telegram não são contornadas
 
 ## Comandos após instalar o novo commit na VPS

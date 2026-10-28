@@ -80,7 +80,7 @@ class PublicDiscoveryTests(unittest.TestCase):
 
     def test_private_keywords_take_priority_over_daily_defaults(self):
         terms = self.vault / discovery.KEYWORDS_FILE
-        terms.write_text("IPTV PT\\nstreaming tv\\n", encoding="utf-8")
+        terms.write_text("IPTV PT\nstreaming tv\n", encoding="utf-8")
         terms.chmod(0o600)
         for day in ["2026-10-28", "2026-10-29", "2026-10-30"]:
             self.assertEqual(

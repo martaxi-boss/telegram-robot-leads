@@ -47,6 +47,7 @@ jobs:
           scripts/operation_policy.py
           scripts/safe_runtime.py
           scripts/organic_growth.py
+          scripts/growth_radar.py
           scripts/project_hygiene.py
           scripts/deploy_project_only.py
           scripts/activate_project_only.py

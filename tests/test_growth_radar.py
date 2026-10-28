@@ -34,7 +34,7 @@ class RankingTests(unittest.TestCase):
     def test_sorts_by_public_topic_relevance_without_members(self):
         catalog = {"groups": {
             "@iptvpt": group("@IPTVPT", "IPTV Portugal", ["iptv", "iptv portugal"]),
-            "@streaming": group("@StreamingTV", "Streaming online", ["streaming"]),
+            "@streamingtv": group("@StreamingTV", "Streaming online", ["streaming"]),
             "@unrelated": group("@GenericGroup", "Unrelated", ["news"]),
         }}
         rows = radar.rank_public_groups(catalog, "@iptvpncode", now=NOW)
@@ -51,14 +51,14 @@ class RankingTests(unittest.TestCase):
         catalog = {"groups": {
             "@iptvpncode": group("@iptvpncode", "IPTV Portugal", ["iptv"]),
             "@spam": group("@StreamingSpam", "IPTV Portugal Casino", ["iptv"]),
-            "@legit": group("@LocalIPTV", "IPTV Portugal", ["iptv"]),
+            "@localiptv": group("@LocalIPTV", "IPTV Portugal", ["iptv"]),
         }}
         rows = radar.rank_public_groups(catalog, "@iptvpncode", now=NOW)
         self.assertEqual([r["group"] for r in rows], ["@LocalIPTV"])
 
     def test_does_not_assume_audience_from_public_titles(self):
         catalog = {"groups": {
-            "@one": group("@IPTVGroup", "IPTV 500000 members", ["iptv"]),
+            "@iptvgroup": group("@IPTVGroup", "IPTV 500000 members", ["iptv"]),
         }}
         rows = radar.rank_public_groups(catalog, "@iptvpncode", now=NOW)
         self.assertEqual(rows[0]["members_estimate"], None)
@@ -67,7 +67,7 @@ class RankingTests(unittest.TestCase):
     def test_corrupt_entries_dropped_not_contacted(self):
         catalog = {"groups": {
             "@bad": group("@OTHER_NAME", "IPTV", ["iptv"]),
-            "@entry": group("@EntryIPTV", "IPTV", ["iptv"]),
+            "@entryiptv": group("@EntryIPTV", "IPTV", ["iptv"]),
             "@malformed": {"username": "@Malformed", "title": "IPTV", "matched_keywords": "iptv"},
         }}
         rows = radar.rank_public_groups(catalog, "@iptvpncode", now=NOW)
@@ -75,9 +75,9 @@ class RankingTests(unittest.TestCase):
 
     def test_stale_public_group_has_no_recency_bonus(self):
         rows = radar.rank_public_groups(
-            {"groups": {"@old": group("@OldIPTV", "IPTV Portugal", ["iptv"],
+            {"groups": {"@oldiptv": group("@OldIPTV", "IPTV Portugal", ["iptv"],
                                        seen="2025-01-01T12:00:00+00:00"),
-                        "@new": group("@NewIPTV", "IPTV Portugal", ["iptv"])}},
+                        "@newiptv": group("@NewIPTV", "IPTV Portugal", ["iptv"])}},
             "@iptvpncode", now=NOW)
         self.assertEqual(rows[0]["group"], "@NewIPTV")
         self.assertEqual(rows[0]["metadata_relevance_score"] -
@@ -91,7 +91,7 @@ class RankingTests(unittest.TestCase):
 
     def test_nonascii_public_topics_are_normalized(self):
         rows = radar.rank_public_groups(
-            {"groups": {"@tvpt": group("@CanalTVPT", "Televisão Portuguesa e Séries",
+            {"groups": {"@canaltvpt": group("@CanalTVPT", "Televisão Portuguesa e Séries",
                                        ["televisão portugal", "séries"])}},
             "@iptvpncode", now=NOW)
         self.assertEqual(len(rows), 1)
@@ -176,7 +176,7 @@ class IntegrationTests(unittest.TestCase):
         write_catalog(self.catalog_path, {"schema": 1, "last_scan_at": STAMP,
             "groups": {
                 "@sport": group("@SportsTV", "Football", ["sport"]),
-                "@iptvpt": group("@PTIPTV", "IPTV Portugal", ["iptv portugal"]),
+                "@ptiptv": group("@PTIPTV", "IPTV Portugal", ["iptv portugal"]),
             }})
         result = radar.build_radar(catalog_path=self.catalog_path,
                                   metrics_db=self.metrics_path, now=NOW)

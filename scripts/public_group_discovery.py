@@ -322,8 +322,8 @@ def main() -> int:
             return 0
         config = inspect(args.vault)
         today = datetime.now(ZoneInfo("Europe/Lisbon")).date().isoformat()
-    queries = (select_keywords(args.vault, config["group"], args.query)
-               if args.query else select_daily_keywords(args.vault, config["group"], today))
+        queries = (select_keywords(args.vault, config["group"], args.query)
+                   if args.query else select_daily_keywords(args.vault, config["group"], today))
         if args.preview:
             print(json.dumps({"status": "READY_OFFLINE", "keywords": queries,
                               "voluntary_join_url": public_join_url(config["group"]),

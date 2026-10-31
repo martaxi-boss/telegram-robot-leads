@@ -1,5 +1,34 @@
 # Current Project State
 
+## Atualização corrente — 31-10-2026 (não confundir código com deploy)
+
+**Regras operacionais:** consultar `docs/BOOTSTRAP.md`, referenciado em
+`AGENTS.md`. Este é o ponto de entrada funcional do **único** Telegram
+Robot Leads; não há framework, coordenador ou worker adicional.
+
+**Fonte GitHub:** a `main` integrou a PR #47, commit
+`91ee9a200fd84cda07db204fc82a82073b25422d`. A implementação atual
+mantém conta 1 (Portugal/Espanha), conta 2 (resto da Europa), permite ambas
+no mesmo grupo, regista entradas e pendências por (conta, grupo), reconhece
+registos herdados e **não** impõe uma quota diária de entradas em grupos.
+Há espaçamento entre operações e resposta a restrições reais do Telegram.
+
+**Testes:** 272 testes PASS, `git diff --check` PASS, motor REA FINAL,
+[Actions #41239720587](https://github.com/martaxi-boss/VPS/actions/runs/41239720587).
+Esta é uma certificação do **código**, não de ações reais no Telegram.
+
+**Última observação conhecida na VPS (31-10-2026):** o SHA instalado ainda era
+`3d53bf473fc0a37a4d8905f58a5bfff0948b3177`, anterior ao commit acima.
+Duas sessões Telethon autenticadas, trabalhador PM2 online, dados e backups
+preservados; nenhuma entrada nova de grupo foi comprovada com a revisão
+mais recente. **Deploy e ensaio real desta revisão continuam pendentes.**
+Atualizar este parágrafo apenas com nova prova efetiva e respetivo SHA/run.
+
+**Histórico preservado:** o texto abaixo documenta estados anteriores
+(18–20/10/2026, incluindo PRs e limites já substituídos). É evidência
+cronológica, **não substitui** o bootstrap nem esta atualização.
+
+
 ## Operational closure additions (2026-10-19, subject to PR CI and VPS staging)
 
 Public group discovery is now accompanied by a separate **operator review**

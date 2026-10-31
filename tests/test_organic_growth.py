@@ -226,7 +226,13 @@ class OrganicGrowthTests(unittest.TestCase):
             result = self.execute(growth.approve_pending_join_request, model, first)
         conversion.assert_called_once()
         self.assertEqual(result, {"status": "APPROVED_REQUEST",
-                                  "approvals_accepted": 1, "account": 1})
+                                  "approvals_accepted": 1, "account": 1,
+                                  "owner_notice": "ACCEPTED"})
+        self.assertEqual(len(first.messages), 1)
+        self.assertIn("Conta 1", first.messages[0])
+        self.assertNotIn("501", first.messages[0])
+        self.assertEqual(self.state["approved_join_requests_done"]["501"]["owner_notice"],
+                         "ACCEPTED")
         self.assertIn(("get_entity", TARGET), first.calls)
         self.assertNotIn(("get_entity", CHANNEL), first.calls)
         self.assertEqual(self.snapshots[1]["pending_join_requests"]["501"]["account"], 1)
@@ -251,11 +257,65 @@ class OrganicGrowthTests(unittest.TestCase):
                 now=NOW + 3600))
         self.assertEqual(seen_accounts, [2])
         self.assertEqual(result, {"status": "APPROVED_REQUEST",
-                                  "approvals_accepted": 1, "account": 2})
+                                  "approvals_accepted": 1, "account": 2,
+                                  "owner_notice": "ACCEPTED"})
+        self.assertEqual(len(second.messages), 1)
+        self.assertIn("Conta 2", second.messages[0])
+        self.assertNotIn("502", second.messages[0])
         self.assertEqual(self.state["accounts"]["1"]["join_request_approvals"], 1)
         self.assertEqual(self.state["accounts"]["2"]["join_request_approvals"], 1)
         self.assertEqual(self.state["approved_join_requests_done"]["502"]["account"], 2)
         self.assertTrue(second.disconnected)
+
+    def test_owner_notice_unknown_result_does_not_repeat_approval(self):
+        first = FakeClient(pending=[501], send_result=SimpleNamespace(id=None))
+        with patch.object(growth.utils, "get_input_user", return_value=object()):
+            outcome = self.execute(growth.approve_pending_join_request,
+                                   configured(), first)
+        self.assertEqual(outcome["owner_notice"], "UNCERTAIN")
+        self.assertEqual(self.state["accounts"]["1"]["join_request_approvals"], 1)
+        self.assertEqual(self.state["approved_join_requests_done"]["501"]["owner_notice"],
+                         "UNCERTAIN")
+        self.assertEqual(len(first.messages), 1)
+        self.state["join_request_last_scan"] = 0
+        second = FakeClient(pending=[501])
+        with patch.object(growth.utils, "get_input_user", return_value=object()):
+            result = self.execute(growth.approve_pending_join_request,
+                                  configured(), second, now=NOW + 3600)
+        self.assertEqual(result["status"], "NO_PENDING_REQUESTS")
+        self.assertEqual(second.messages, [])
+        self.assertEqual(self.state["accounts"]["1"]["join_request_approvals"], 1)
+
+    def test_owner_notice_transport_exception_preserves_approval(self):
+        class FailingMessageClient(FakeClient):
+            async def send_message(self, channel, message, *, link_preview):
+                self.calls.append(("send_attempt", channel))
+                raise TimeoutError("remote status unknown")
+        first = FailingMessageClient(pending=[501])
+        with patch.object(growth.utils, "get_input_user", return_value=object()):
+            outcome = self.execute(growth.approve_pending_join_request,
+                                   configured(), first)
+        self.assertEqual(outcome["owner_notice"], "UNCERTAIN")
+        self.assertIn(("send_attempt", "me"), first.calls)
+        self.assertEqual(self.state["accounts"]["1"]["join_request_approvals"], 1)
+        self.assertEqual(self.state["approved_join_requests_done"]["501"]["status"],
+                         "approved")
+
+    def test_owner_notice_never_reveals_requester_in_public_report(self):
+        first = FakeClient(pending=[501])
+        with patch.object(growth.utils, "get_input_user", return_value=object()):
+            self.execute(growth.approve_pending_join_request, configured(), first)
+        self.assertEqual(len(first.messages), 1)
+        self.assertIn("Aprovacao aceite", first.messages[0])
+        self.assertNotIn("501", first.messages[0])
+        self.assertNotIn(CHANNEL, first.messages[0])
+        public = public_cycle_summary({"organic_growth": {
+            "join_requests": {
+                "status": "APPROVED_REQUEST", "owner_notice": "ACCEPTED",
+                "account": 1, "user_id": 501,
+            }}})
+        self.assertEqual(public["owner_notice_status"], "ACCEPTED")
+        self.assertNotIn("501", json.dumps(public))
 
     def test_blocked_account_does_not_trigger_other_account_failover(self):
         self.state["accounts"]["1"]["blocked"] = True

@@ -29,6 +29,7 @@ RUNTIME_FILES = (
     "scripts/leads_operational_report.py",
     "scripts/operation_policy.py",
     "scripts/organic_growth.py",
+    "scripts/public_group_discovery.py",
     "scripts/growth_radar.py",
     "scripts/activate_project_only.py",
     "scripts/project_hygiene.py",

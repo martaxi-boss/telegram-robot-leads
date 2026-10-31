@@ -17,6 +17,11 @@ NEW = "f" * 40
 
 
 class InstallerTests(unittest.TestCase):
+    def test_release_manifest_includes_regional_discovery_module(self):
+        # Without this entry, a validated regional discovery release may
+        # crash against the previous module's function signature on the VPS.
+        self.assertIn("scripts/public_group_discovery.py", deploy.RUNTIME_FILES)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)

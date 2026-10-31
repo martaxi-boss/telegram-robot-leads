@@ -33,6 +33,14 @@ MAX_RESULTS_PER_QUERY = 30
 MAX_CATALOG_GROUPS = 2500
 MAX_CATALOG_BYTES = 2 * 1024 * 1024
 
+# Public group name searches, never participant access or verified geolocation.
+REGIONAL_KEYWORDS = {
+    "PT_ES": ("iptv portugal", "iptv espana", "iptv espanha"),
+    "EU_OTHER": ("iptv france", "iptv germany", "iptv italia",
+                 "iptv nederland", "iptv europe"),
+}
+REGIONAL_ACCOUNTS = {"PT_ES": 1, "EU_OTHER": 2}
+
 
 class DiscoveryBlocked(RuntimeError):
     """A prerequisite or a Telegram protection prevented a safe discovery."""
@@ -76,6 +84,26 @@ def select_keywords(vault: Path, target: str, supplied: list[str]) -> list[str]:
     if not keywords:
         raise DiscoveryBlocked("discovery_keywords_empty")
     return keywords
+
+
+def _validate_regional_account(config: dict, account_number: int,
+                               region: str | None) -> None:
+    if type(account_number) is not int or account_number not in (1, 2):
+        raise DiscoveryBlocked("discovery_account_invalid")
+    entries = config.get("entries")
+    if not isinstance(entries, (list, tuple)) or len(entries) < account_number:
+        raise DiscoveryBlocked("discovery_account_session_missing")
+    if region is not None and REGIONAL_ACCOUNTS.get(region) != account_number:
+        raise DiscoveryBlocked("discovery_region_account_mismatch")
+
+
+def select_regional_keywords(vault: Path, target: str, region: str) -> list[str]:
+    """Search terms indicate regional relevance, not a group's real location."""
+    if region not in REGIONAL_KEYWORDS:
+        raise DiscoveryBlocked("discovery_region_invalid")
+    if "iptv" not in target.casefold():
+        raise DiscoveryBlocked("discovery_region_niche_unverified")
+    return select_keywords(vault, target, list(REGIONAL_KEYWORDS[region]))
 
 
 def public_join_url(target: str) -> str:
@@ -181,7 +209,8 @@ def catalog_lock(path: Path):
         os.close(fd)
 
 
-def merge_results(catalog: dict, candidates: list[dict], stamp: str) -> int:
+def merge_results(catalog: dict, candidates: list[dict], stamp: str,
+                  region: str | None = None) -> int:
     groups = catalog["groups"]
     new_count = 0
     for item in candidates:
@@ -194,7 +223,7 @@ def merge_results(catalog: dict, candidates: list[dict], stamp: str) -> int:
             new_count += 1
         seen_keywords = set(prior.get("matched_keywords", []))
         seen_keywords.update(item["matched_keywords"])
-        groups[key] = {
+        record = {
             "username": item["username"],
             "title": item["title"],
             "url": item["url"],
@@ -202,19 +231,29 @@ def merge_results(catalog: dict, candidates: list[dict], stamp: str) -> int:
             "first_seen_at": prior["first_seen_at"],
             "last_seen_at": stamp,
         }
+        earlier = prior.get("matched_regions", [])
+        regional_tags = ({tag for tag in earlier if tag in REGIONAL_KEYWORDS}
+                         if isinstance(earlier, list) else set())
+        if region is not None:
+            regional_tags.add(region)
+        if regional_tags:
+            record["matched_regions"] = sorted(regional_tags)
+        groups[key] = record
     return new_count
 
 
 async def discover_once(config: dict, keywords: list[str], catalog_path: Path = DEFAULT_CATALOG,
-                        client_factory=None, delay_seconds: float = 3) -> dict:
+                        client_factory=None, delay_seconds: float = 3,
+                        *, account_number: int = 1, region: str | None = None) -> dict:
     """Search public group names/titles; store no individual user information."""
+    _validate_regional_account(config, account_number, region)
     target = config["group"]
     join_url = public_join_url(target)
     factory = client_factory or make_memory_client
     total_new = 0
     with catalog_lock(catalog_path):
         catalog = read_catalog(catalog_path)
-        client = factory(config["entries"][0], config)
+        client = factory(config["entries"][account_number - 1], config)
         try:
             await asyncio.wait_for(client.connect(), timeout=25)
             if not await asyncio.wait_for(client.is_user_authorized(), timeout=20):
@@ -233,7 +272,7 @@ async def discover_once(config: dict, keywords: list[str], catalog_path: Path = 
                     raise DiscoveryBlocked("telegram_search_response_invalid")
                 candidates = select_public_groups(chats, target, keyword)
                 stamp = datetime.now(timezone.utc).isoformat()
-                total_new += merge_results(catalog, candidates, stamp)
+                total_new += merge_results(catalog, candidates, stamp, region=region)
                 catalog["last_scan_at"] = stamp
                 write_catalog(catalog_path, catalog)
                 if index + 1 < len(keywords) and delay_seconds:
@@ -243,6 +282,8 @@ async def discover_once(config: dict, keywords: list[str], catalog_path: Path = 
                 await client.disconnect()
     return {
         "status": "PUBLIC_DISCOVERY_COMPLETE",
+        "account_number": account_number,
+        "region": region,
         "queries": len(keywords),
         "new_public_groups": total_new,
         "total_public_groups": len(catalog["groups"]),
@@ -257,24 +298,45 @@ async def discover_once(config: dict, keywords: list[str], catalog_path: Path = 
 
 async def discover_daily(config: dict, vault: Path, catalog_path: Path = DEFAULT_CATALOG,
                          client_factory=None, delay_seconds: float = 3,
-                         day: str | None = None) -> dict:
-    """At most one discovery attempt per Portugal calendar day in the existing worker.
+                         day: str | None = None, *,
+                         account_number: int = 1, region: str | None = None) -> dict:
+    """At most one discovery attempt per account per Lisbon calendar day.
 
-    Persist the attempt *before* contacting Telegram so restarts cannot create
-    repeated automatic searches after timeouts or anti-abuse signals.
+    Persist each attempt before Telegram calls. A prior account-1 legacy scan
+    counts as today's regional account-1 scan, preventing duplicate queries.
     """
-    keywords = select_keywords(vault, config["group"], [])
+    _validate_regional_account(config, account_number, region)
+    keywords = (select_regional_keywords(vault, config["group"], region)
+                if region is not None else
+                select_keywords(vault, config["group"], []))
     stamp_day = day or datetime.now(ZoneInfo("Europe/Lisbon")).date().isoformat()
     with catalog_lock(catalog_path):
         catalog = read_catalog(catalog_path)
-        if catalog.get("last_attempt_day") == stamp_day:
-            return {"status": "PUBLIC_DISCOVERY_ALREADY_ATTEMPTED_TODAY",
-                    "queries": 0, "new_public_groups": 0}
-        catalog["last_attempt_day"] = stamp_day
+        if region is None:
+            if catalog.get("last_attempt_day") == stamp_day:
+                return {"status": "PUBLIC_DISCOVERY_ALREADY_ATTEMPTED_TODAY",
+                        "queries": 0, "new_public_groups": 0}
+            catalog["last_attempt_day"] = stamp_day
+        else:
+            attempts = catalog.get("regional_attempts", {})
+            if not isinstance(attempts, dict):
+                raise DiscoveryBlocked("discovery_regional_attempts_invalid")
+            previous = attempts.get(str(account_number)) == stamp_day
+            legacy = (account_number == 1
+                      and catalog.get("last_attempt_day") == stamp_day)
+            if previous or legacy:
+                return {"status": "PUBLIC_DISCOVERY_ALREADY_ATTEMPTED_TODAY",
+                        "account_number": account_number, "region": region,
+                        "queries": 0, "new_public_groups": 0}
+            attempts[str(account_number)] = stamp_day
+            catalog["regional_attempts"] = attempts
+            if account_number == 1:
+                catalog["last_attempt_day"] = stamp_day
         write_catalog(catalog_path, catalog)
     return await discover_once(config, keywords, catalog_path,
                                client_factory=client_factory,
-                               delay_seconds=delay_seconds)
+                               delay_seconds=delay_seconds,
+                               account_number=account_number, region=region)
 
 
 def main() -> int:

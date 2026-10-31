@@ -93,14 +93,14 @@ autoriza operações sobre terceiros e não modifica o trabalhador em produção
   de username.
 - A fila atual aceita apenas pessoas que tenham autorizado a entrada;
   as contas 1/2 continuam com as regiões e as sessões existentes.
-- **Melhoria ainda por implementar:** contadores agregados de fila
-  (autorizados configurados, à espera, concluídos, ambíguos e IDs históricos),
-  sem expor dados pessoais no PM2/supervisor; testes explícitos de saída,
-  reinício e tentativa pela segunda conta. Não criar worker, base de dados,
-  framework, motor ou ponte adicionais.
-- A ferramenta bloqueou a tentativa de edição operacional antes da
-  execução: **não foi aplicado nem certificado novo código de fila** nesta
-  passagem; todo o trabalho gravado é documental.
+- **Implementado e testado na branch:** contadores agregados da fila
+  dos utilizadores autorizados (configurados, à espera, registados, ambíguos
+  e IDs históricos únicos), sem expor identidades no PM2/supervisor.
+  Também há testes de persistência, mudança de username e processamento
+  por outra conta sem repetição; reutiliza-se o trabalhador e a base atuais.
+- **Prova do código:** REA FINAL #41252089850 — 275 testes PASS,
+  `git diff --check` PASS, execução interna exit 0 e `quiesced`.
+  A verificação foi feita numa cópia isolada. **Não houve deploy na VPS.**
 - Faltam backups antigos da base users.db e do log telethon_adder.log
   para determinar se alguma conta adicionou pessoas no passado.
   Uma recuperação exigirá primeiro comparação em modo só de leitura.

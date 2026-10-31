@@ -26,10 +26,13 @@ from zoneinfo import ZoneInfo
 
 from telethon import errors, utils
 from telethon.tl.functions.messages import (
+    ExportChatInviteRequest,
+    GetExportedChatInviteRequest,
+    GetExportedChatInvitesRequest,
     GetChatInviteImportersRequest,
     HideChatJoinRequestRequest,
 )
-from telethon.tl.types import InputUserEmpty
+from telethon.tl.types import InputUserEmpty, InputUserSelf
 
 from operation_policy import (
     DEFAULT_TZ,
@@ -46,6 +49,10 @@ GROUP_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
 SCAN_INTERVAL_SECONDS = 30 * 60
 PROMOTION_HOUR = 12
 MAX_PENDING_RESULTS = 20
+VOLUNTARY_LINK_FILE = "voluntary_group_join_link.json"
+VOLUNTARY_LINK_TITLE = "Leads voluntary request"
+MAX_EXISTING_INVITES = 80
+INVITE_LINK_RE = re.compile(r"https://t\\.me/(?:\\+|joinchat/)[A-Za-z0-9_-]{8,128}\\Z")
 
 # Original, non-deceptive copy; visible only in a channel explicitly selected
 # by its administrator. These are not unsolicited private messages.
@@ -333,6 +340,166 @@ async def approve_pending_join_request(
             persist(state)
             return _result("APPROVED_REQUEST", approvals_accepted=1)
         return _result("NO_PENDING_REQUESTS", approvals_accepted=0)
+    finally:
+        if client.is_connected():
+            await client.disconnect()
+
+
+def _private_voluntary_link_path(vault: Path) -> Path:
+    """Keep the reusable invitation hash inside the existing private vault."""
+    if not vault.is_absolute() or vault.is_symlink():
+        raise ProbeBlocked("voluntary_link_vault_invalid")
+    parent = vault.stat()
+    if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid()
+            or stat.S_IMODE(parent.st_mode) & 0o077):
+        raise ProbeBlocked("voluntary_link_vault_permissions_invalid")
+    path = vault / VOLUNTARY_LINK_FILE
+    if path.is_symlink():
+        raise ProbeBlocked("voluntary_link_symlink_invalid")
+    return path
+
+
+def _read_voluntary_link(vault: Path, group: str) -> str | None:
+    path = _private_voluntary_link_path(vault)
+    if not path.exists():
+        return None
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(info.st_mode)
+                    or info.st_uid != os.geteuid()
+                    or stat.S_IMODE(info.st_mode) & 0o077
+                    or info.st_size > 2048):
+                raise ProbeBlocked("voluntary_link_permissions_invalid")
+            payload = json.loads(stream.read().decode("utf-8"))
+    except ProbeBlocked:
+        raise
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise ProbeBlocked("voluntary_link_unreadable") from exc
+    if (not isinstance(payload, dict)
+            or set(payload) != {"schema", "target_group", "account", "link"}
+            or type(payload["schema"]) is not int or payload["schema"] != 1
+            or type(payload["account"]) is not int or payload["account"] != 1
+            or payload["target_group"] != group.casefold()
+            or not isinstance(payload["link"], str)
+            or not INVITE_LINK_RE.fullmatch(payload["link"])):
+        raise ProbeBlocked("voluntary_link_state_invalid")
+    return payload["link"]
+
+
+def _store_voluntary_link(vault: Path, group: str, link: str) -> None:
+    """Create once; never replace an existing link, even after a crash."""
+    path = _private_voluntary_link_path(vault)
+    if not INVITE_LINK_RE.fullmatch(link):
+        raise ProbeBlocked("voluntary_link_format_invalid")
+    data = json.dumps({
+        "schema": 1, "target_group": group.casefold(),
+        "account": 1, "link": link,
+    }, sort_keys=True).encode("utf-8")
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except FileExistsError as exc:
+        raise ProbeBlocked("voluntary_link_state_changed_no_overwrite") from exc
+
+
+def _request_required_invite(invite: Any) -> str:
+    """Reject direct-join, expired or revoked invitations."""
+    link = getattr(invite, "link", None)
+    if (not isinstance(link, str) or not INVITE_LINK_RE.fullmatch(link)
+            or getattr(invite, "request_needed", None) is not True
+            or getattr(invite, "revoked", False) is True):
+        raise ProbeBlocked("voluntary_link_not_an_active_approval_link")
+    expiry = getattr(invite, "expire_date", None)
+    if expiry is not None:
+        if isinstance(expiry, datetime):
+            if expiry.timestamp() <= time.time():
+                raise ProbeBlocked("voluntary_link_expired")
+        elif type(expiry) is int:
+            if expiry <= int(time.time()):
+                raise ProbeBlocked("voluntary_link_expired")
+        else:
+            raise ProbeBlocked("voluntary_link_expiry_invalid")
+    return link
+
+
+async def ensure_voluntary_request_link(
+    config: dict, model: dict, vault: Path,
+    connect: Callable[[dict, int], Awaitable[Any]],
+) -> dict[str, Any]:
+    """One-time setup of the owner's approval-only join link, using account 1.
+
+    This function is intentionally NOT part of each worker cycle. It makes no
+    posts and never sends requests to people. The existing run loop approves
+    only user-initiated requests; it must not guess Telegram rate limits.
+    """
+    if (model.get("approve_join_requests") is not True
+            or model.get("target_group", "").casefold() != config["group"].casefold()):
+        raise ProbeBlocked("voluntary_link_model_not_enabled")
+    saved = _read_voluntary_link(vault, config["group"])
+    client = await connect(config, 1)
+    try:
+        group = await asyncio.wait_for(client.get_entity(config["group"]), timeout=20)
+        if not getattr(group, "megagroup", False) or getattr(group, "broadcast", False):
+            raise ProbeBlocked("voluntary_link_target_not_a_supergroup")
+        permissions = await asyncio.wait_for(
+            client.get_permissions(group, "me"), timeout=20,
+        )
+        if not (
+            getattr(permissions, "is_creator", False) is True
+            or (getattr(permissions, "is_admin", False) is True
+                and getattr(permissions, "invite_users", False) is True)
+        ):
+            raise ProbeBlocked("voluntary_link_admin_permission_missing")
+
+        if saved is not None:
+            outcome = await asyncio.wait_for(
+                client(GetExportedChatInviteRequest(peer=group, link=saved)),
+                timeout=25,
+            )
+            remote_link = _request_required_invite(getattr(outcome, "invite", None))
+            if remote_link != saved:
+                raise ProbeBlocked("voluntary_link_remote_mismatch")
+            return {"status": "EXISTING_VERIFIED", "request_needed": True,
+                    "link_recorded": True, "created": 0, "members_added": 0}
+
+        # Recovery after crash between Telegram link creation and local write:
+        # reuse the single named link belonging to THIS account.
+        previous = await asyncio.wait_for(
+            client(GetExportedChatInvitesRequest(
+                peer=group, admin_id=InputUserSelf(),
+                revoked=False, limit=MAX_EXISTING_INVITES,
+            )), timeout=25,
+        )
+        invites = getattr(previous, "invites", None)
+        if not isinstance(invites, (list, tuple)):
+            raise ProbeBlocked("voluntary_link_inventory_invalid")
+        if len(invites) >= MAX_EXISTING_INVITES:
+            raise ProbeBlocked("voluntary_link_inventory_incomplete")
+        named = [item for item in invites
+                 if getattr(item, "title", None) == VOLUNTARY_LINK_TITLE]
+        if len(named) > 1:
+            raise ProbeBlocked("voluntary_link_duplicate_named_links")
+        if named:
+            link = _request_required_invite(named[0])
+            status = "REUSED"
+        else:
+            invite = await asyncio.wait_for(
+                client(ExportChatInviteRequest(
+                    peer=group, request_needed=True,
+                    title=VOLUNTARY_LINK_TITLE,
+                )), timeout=25,
+            )
+            link = _request_required_invite(invite)
+            status = "CREATED"
+        _store_voluntary_link(vault, config["group"], link)
+        return {"status": status, "request_needed": True,
+                "link_recorded": True, "created": int(status == "CREATED"),
+                "members_added": 0}
     finally:
         if client.is_connected():
             await client.disconnect()

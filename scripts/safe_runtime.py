@@ -389,6 +389,32 @@ async def _add_one(
             await client.disconnect()
 
 
+def approved_queue_snapshot(users: list[str], state: dict) -> dict:
+    """Aggregate counts for the existing, explicitly authorized intake only.
+
+    Never include handles, user identifiers or phone numbers in the output.
+    A new username may still refer to a previously recorded stable identity;
+    the existing identity check remains authoritative.
+    """
+    recorded = state["approved_users_done"]
+    pending = state["pending_member_actions"]
+    result = {"configured": len(users), "waiting": 0,
+              "recorded": 0, "uncertain": 0}
+    for name in users:
+        key = name.lower()
+        if key in recorded:
+            result["recorded"] += 1
+        elif key in pending:
+            result["uncertain"] += 1
+        else:
+            result["waiting"] += 1
+    result["global_recorded_ids"] = len(
+        set(state["approved_user_ids_done"])
+        | set(state["approved_join_requests_done"])
+    )
+    return result
+
+
 async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     config = inspect(vault)
 
@@ -639,8 +665,10 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
             )
             save_state(path, state)
 
+    report["approved_queue"] = approved_queue_snapshot(users, state)
     append_supervisor_event({
         "kind": "cycle",
+        "approved_queue": report["approved_queue"],
         "api_source": config["api_source"],
         "group_actions": report["group_actions"],
         "member_actions": report["member_actions"],
@@ -686,6 +714,10 @@ def public_cycle_summary(report: dict) -> dict:
     """
     groups = report.get("group_actions") or []
     members = report.get("member_actions") or []
+    queue = report.get("approved_queue") or {}
+    def queue_count(field: str) -> int:
+        value = queue.get(field) if isinstance(queue, dict) else None
+        return value if type(value) is int and value >= 0 else 0
     discovery = report.get("public_discovery")
     discovery_status = discovery.get("status") if isinstance(discovery, dict) else None
     if discovery_status not in {
@@ -737,6 +769,11 @@ def public_cycle_summary(report: dict) -> dict:
         "group_actions_recorded": len(groups),
         "groups_joined": sum(item.get("status") == "joined" for item in groups),
         "member_actions_recorded": len(members),
+        "approved_queue_configured": queue_count("configured"),
+        "approved_queue_waiting": queue_count("waiting"),
+        "approved_queue_recorded": queue_count("recorded"),
+        "approved_queue_uncertain": queue_count("uncertain"),
+        "approved_history_unique_ids": queue_count("global_recorded_ids"),
         "members_added": sum(item.get("status") == "added" for item in members),
         "members_not_addable": sum(
             item.get("status") == "not_addable" for item in members

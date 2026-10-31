@@ -1,0 +1,69 @@
+# Telegram Robot Leads — comparativo técnico (31-10-2026)
+
+**Âmbito:** motor histórico, motor atual e melhorias pedidas pelo proprietário. A única fonte normativa é [BOOTSTRAP.md](BOOTSTRAP.md); este relatório apenas documenta evidências e próximos testes.
+
+## Fontes
+- Histórico: commit [18629988](https://github.com/martaxi-boss/telegram-robot-leads/commit/1862998844782764d263ee8e49a1476a7f86beac), main.py (2.312 linhas), leitura REA [#41249943708](https://github.com/martaxi-boss/VPS/actions/runs/41249943708).
+- Atual: scripts/safe_runtime.py, scripts/operation_policy.py e scripts/member_groups.py, commit e9beebb08623d012a2d25ea4ad63b20449f459fa; REA [#41251602824](https://github.com/martaxi-boss/VPS/actions/runs/41251602824).
+- VPS: SHA instalado 8298503f7b21466ebf14b9f164f9e103c9c781e7, duas sessões, PM2 online, 3 grupos catalogados, uma adesão a grupo pela conta 2 e **zero ações de membros** em 16.730 eventos observados: [#41250971838](https://github.com/martaxi-boss/VPS/actions/runs/41250971838).
+
+## Comparação comprovada
+
+| Aspeto | Motor antigo | Motor atual | Decisão |
+|---|---|---|---|
+| Descobrir grupos públicos | Sim, nicho e pesquisas por região | Sim, PT_ES e EU_OTHER | Preservar |
+| Entrar em grupos | Sim, por sessão | Sim, histórico por (conta, grupo); ambas podem entrar no mesmo grupo | Preservar |
+| Filtrar terceiros | Iteração de participantes, exclusão de administradores, bots, contas eliminadas e perfis sem username | Não extrai membros de grupos terceiros | Não reativar |
+| Seleção complementar | Atividade recente, nome/perfil e região | Apenas entradas de pessoas com autorização expressa | Não presumir que username prevê permissão |
+| Fila | SQLite users.db com pendentes e estados finais | approved_users.txt com marcadores de autorização e tratamento serial pelo worker | Melhorar a visibilidade |
+| Histórico global | IDs estáveis e estados no SQLite | approved_user_ids_done, approved_join_requests_done, pending_member_ids e approved_users_done no estado comum | Reutilizar, não duplicar |
+| Pessoa sai do destino | Proprietário afirma que não era readicionada; sem registo histórico recuperado para provar | Resultado antigo persiste; mudança de username e mudança de conta não anulam o ID | Testar reinício e saída |
+| Limites/tempo | Intervalos variáveis e tratamento de erros | Horário existente 08:00–22:00, intervalos e reação às restrições reais | Preservar sem disfarces |
+| Sucesso | invite_ok, adds_ok e erros de privacidade/contacto | Só considera sucesso confirmado pela resposta (missing_invitees); pendências ambíguas persistem | Preservar |
+| Acompanhamento | adder_daily e adder_events | Supervisor passivo, PM2 e diário sanitizado | Acrescentar contagens de fila sem identidades |
+| Provas de membros adicionados | Existia capacidade no código; registos antigos indisponíveis | Zero adições observadas nos dados atuais | Não confundir ausência de prova com prova de ausência |
+
+## Requisitos adicionais acordados
+
+A deduplicação de **grupos de origem** é por conta e por grupo. A memória das **pessoas do grupo de destino** é global, para as duas contas e para qualquer grupo de origem. Uma pessoa previamente adicionada não deve voltar a ser adicionada após sair, reaparecer noutro grupo ou mudar o username. A referência estável, quando legítima e disponível, é o ID Telegram. Recusas, desistências e resultados incertos também devem ser preservados sem repetição automática.
+
+A experiência do proprietário é de aproximadamente dez adições por dia por conta, com praticamente nenhuma falha observada. Não foi possível confirmar esses números nos registos atuais. O motor antigo tratava UserPrivacyRestrictedError e UserNotMutualContactError, pelo que o código não comprova um filtro capaz de antecipar todas as permissões.
+
+A simples presença de alguém num grupo público, um username ou atividade recente **não equivale à sua autorização para entrar noutro grupo**. Recuperar apenas funções compatíveis com admissões autorizadas; não voltar a recolher indiscriminadamente membros de terceiros nem a disfarçar operações para ultrapassar restrições Telegram.
+
+## Próxima fase de implementação
+
+1. **Visibilidade da fila autorizada no mesmo worker e supervisor:** configured (entradas autorizadas), waiting (pendentes), recorded (resultado conhecido), uncertain (resultado remoto ambíguo), global_recorded_ids (IDs históricos únicos). Mostrar somente totais agregados, sem usernames, telefones ou IDs.
+2. **Testes de regressão da memória comum:** após adição, saída voluntária, reinício e mudança de alias, a segunda conta não pode gerar outra tentativa para o mesmo ID.
+3. **Resultados comprovados:** testar que missing_invitees, restrições de privacidade e retornos incertos não são contabilizados como entradas bem-sucedidas.
+4. **Dados históricos:** se for encontrado backup antigo de users.db/telethon_adder.log, primeiro verificar e comparar em modo só de leitura; não importar nem apagar nada automaticamente.
+5. **Governança:** testes, diff e PR antes de qualquer deploy. Não alterar a ponte, as sessões, o estado privado ou outros projetos.
+
+## Resultado desta passagem e verificação (31-10-2026)
+
+**Funcionalidade de observabilidade implementada na branch**, mas **não
+instalada na VPS**: o trabalhador existente calcula um resumo agregado da
+lista de utilizadores explicitamente autorizados e junta-o ao diário
+do supervisor e ao relatório público do ciclo, sem identificadores.
+
+- `configured`: entradas autorizadas atualmente configuradas;
+- `waiting`: usernames ainda sem resultado/pedido pendente visível;
+- `recorded`: usernames com resultado já registado;
+- `uncertain`: usernames com resultado remoto pendente de reconciliação;
+- `global_recorded_ids`: número de IDs estáveis distintos entre adições
+  anteriores e pedidos de entrada já aprovados.
+
+O campo `waiting` **não é uma previsão de novos membros**: o username
+pode ser um alias novo de um ID antigo; a validação de identidade já
+existente continua a impedir a repetição entre as duas contas.
+
+**Prova REA FINAL:** [GitHub Actions #41252089850](https://github.com/martaxi-boss/VPS/actions/runs/41252089850),
+execução em cópia isolada, 275 testes PASS, `git diff --check` PASS,
+MCP com código de saída 0 e `settlement=quiesced`.
+Incluem três novos testes para contagem, ausência de dados pessoais
+no resumo e preservação do histórico entre reinícios, aliases e contas.
+
+O motor atual mantém as admissões limitadas aos utilizadores com autorização.
+O comparativo não reativou consultas de participantes de terceiros,
+adições não solicitadas, outro trabalhador ou outro motor. O deploy e
+a verificação de funcionamento na VPS são passos independentes.

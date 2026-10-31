@@ -81,25 +81,32 @@ autoriza operações sobre terceiros e não modifica o trabalhador em produção
   de consulta de participantes e adição automática de terceiros. Não
   confundir testes de software (272 PASS) com prova de crescimento de membros.
 
-### Próxima fase de trabalho
+### Comparativo concluído e fase seguinte definida (31-10-2026)
 
-1. **Auditoria comparativa só de leitura** entre o motor histórico, o
-   runtime atual e os dados/backups existentes. Inventariar funções,
-   formatos de fila e eventos, sem executar ações na rede Telegram.
-2. Definir e testar um **histórico global durável**, independente das
-   duas contas, para pessoas já adicionadas, pessoas que saíram,
-   exclusões e decisões de não voltar a adicionar. Proteger estados
-   existentes; evitar novas tentativas após saída ou recusa.
-3. Recuperar componentes reutilizáveis de fila persistente, classificação,
-   deduplicação, relatórios e monitorização **para adesões autorizadas**.
-   `@username`, atividade recente ou acesso a um grupo público **não
-   demonstram autorização** da pessoa para entrar no grupo de destino.
-   Não reativar recolha indiscriminada de participantes, adições
-   não solicitadas nem disfarce de operações para evitar restrições.
-4. Validar com testes isolados e provas reais das ações permitidas,
-   sem modificar sessões, estado privado, backups, supervisor passivo
-   ou outros projetos. Distinguir código testado, versão instalada
-   e resultados observados. Só depois atualizar o estado do projeto.
+- Relatório factual de correspondências e diferenças:
+  [Motor antigo versus atual](HISTORICAL-ENGINE-COMPARISON-20261031.md).
+  **O relatório não cria outra fonte de regras.**
+- A distinção entre histórico de grupos por **(conta, grupo)** e histórico
+  global de **pessoas** já está implementada no motor atual. A memória
+  global de IDs, adições, pedidos aprovados e operações pendentes não deve
+  ser substituída nem apagada, mesmo que alguém saia do grupo ou mude
+  de username.
+- A fila atual aceita apenas pessoas que tenham autorizado a entrada;
+  as contas 1/2 continuam com as regiões e as sessões existentes.
+- **Implementado e testado na branch:** contadores agregados da fila
+  dos utilizadores autorizados (configurados, à espera, registados, ambíguos
+  e IDs históricos únicos), sem expor identidades no PM2/supervisor.
+  Também há testes de persistência, mudança de username e processamento
+  por outra conta sem repetição; reutiliza-se o trabalhador e a base atuais.
+- **Prova do código:** REA FINAL #41252089850 — 275 testes PASS,
+  `git diff --check` PASS, execução interna exit 0 e `quiesced`.
+  A verificação foi feita numa cópia isolada. **Não houve deploy na VPS.**
+- Faltam backups antigos da base users.db e do log telethon_adder.log
+  para determinar se alguma conta adicionou pessoas no passado.
+  Uma recuperação exigirá primeiro comparação em modo só de leitura.
+- Não reativar recolha indiscriminada de participantes terceiros nem
+  adições não autorizadas. Um username, atividade recente ou participação
+  num grupo público não equivale a autorização para entrar noutro grupo.
 
 ## Sistema existente
 
@@ -138,5 +145,8 @@ de extração, fila e adição do motor antigo. As auditorias de evidência
 (REA #41250761576, #41250832084, #41250916097 e #41250971838)
 **não localizaram sucesso histórico de adições de pessoas** nos dados
 examinados. Ausência de dados antigos não equivale a prova de zero
-adições históricas. O próximo passo é uma auditoria sem escrita.
+adições históricas. O comparativo funcional posterior encontra-se em
+[Motor antigo versus atual](HISTORICAL-ENGINE-COMPARISON-20261031.md).
+A melhoria de visibilidade da fila está implementada e testada no GitHub,
+mas ainda não foi instalada na VPS.
 Consultar `docs/PROJECT-STATE.md` para a situação e proveniência.

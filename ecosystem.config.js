@@ -1,9 +1,9 @@
 /**
  * Telegram Robot Leads — canonical safe PM2 runtime.
  *
- * No legacy discovery/scraping/human-mimic configuration is accepted here.
- * The worker reads only the protected project vault plus explicit operator
- * allowlists and approved/consented usernames.
+ * Public discovery uses two existing authorized accounts for regional group
+ * metadata searches only. The worker never enumerates third-party members
+ * or auto-adds people from search results.
  */
 const cwd = "/opt/telegram-robot-leads";
 
@@ -25,6 +25,7 @@ module.exports = {
         TELEGRAM_GROUP_ALLOWLIST: "group_allowlist.txt",
         TELEGRAM_APPROVED_USERS: "approved_users.txt",
         TELEGRAM_PUBLIC_DISCOVERY_ENABLED: "1",
+        TELEGRAM_REGIONAL_PUBLIC_DISCOVERY_ENABLED: "1",
         TELEGRAM_EVENT_JOURNAL:
           "/var/lib/telegram-robot-leads/supervisor-events.jsonl",
       },

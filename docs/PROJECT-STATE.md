@@ -1,3 +1,38 @@
+## Deploy da fila autorizada — 31-10-2026 (situação mais recente)
+
+**Instalação confirmada via workflow oficial:** [VPS GitHub Actions
+#41252848278](https://github.com/martaxi-boss/VPS/actions/runs/41252848278),
+invocado pela [PR #316](https://github.com/martaxi-boss/VPS/pull/316)
+(merge no repositório VPS `5dc1c6b582395ba18d88002a61e63005b9c3fafe`).
+
+- Fonte **instalada**: `d1accce671254d233ccbdc7e8bc5adcc69b7c347`;
+  fonte **anterior**: `8298503f7b21466ebf14b9f164f9e103c9c781e7`.
+- 275 testes PASS no runner do workflow de deploy; identidade SSH
+  verificada; 12 ficheiros de runtime atualizados.
+- Instalador transacional registou backup
+  `.telegram-leads-release-backups/from-8298503f7b21-to-d1accce67125`.
+- As **2 sessões** existentes foram preservadas, o único PM2
+  `telegram-robot-leads` reiniciado e confirmado **ONLINE**.
+  Outros projetos não foram modificados.
+- Higienização limitada a 7 ficheiros de cache Python deste projeto.
+- O relatório operacional imediato confirmou SHA e PM2, mas apresentou
+  `PM2_ONLINE_DISCOVERY_NOT_VERIFIED`: não comprovou por si só uma
+  nova adesão/descoberta nem um novo ciclo com os contadores da fila.
+  `sessions_online_verified=false` no relatório não significa que as
+  sessões tenham sido eliminadas; apenas que a autenticação online
+  não foi verificada nesse passo.
+- A contagem da fila autorizada está implementada em
+  `scripts/safe_runtime.py`; **ainda falta confirmar nos eventos do
+  supervisor um novo ciclo após este deploy**. Não se declarou
+  qualquer novo membro adicionado.
+
+Esta secção substitui, para efeitos de estado atual, os parágrafos
+históricos abaixo que diziam que o deploy estava pendente. As regras
+funcionais continuam em `docs/BOOTSTRAP.md`. Nenhum estado privado,
+sessão ou projeto externo foi alterado por esta atualização documental.
+
+---
+
 ## Fase comparativa com REA FINAL — 31-10-2026
 
 Foi concluída a comparação do motor antigo com o runtime atual:

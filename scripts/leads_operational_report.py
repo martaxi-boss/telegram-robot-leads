@@ -146,11 +146,29 @@ def _discovery(path: Path) -> dict[str, Any]:
     try:
         _private_directory(path.parent)
         data = read_catalog(path)
+        attempts = data.get("regional_attempts", {})
+        if not isinstance(attempts, dict):
+            raise DiscoveryBlocked("regional_attempts_invalid")
+        counts = {"PT_ES": 0, "EU_OTHER": 0}
+        for item in data["groups"].values():
+            if not isinstance(item, dict):
+                continue
+            observed = item.get("matched_regions", [])
+            if isinstance(observed, list):
+                for region in counts:
+                    if region in observed:
+                        counts[region] += 1
         return {
             "status": "CATALOG_PRESENT",
             "public_groups": len(data["groups"]),
             "last_attempt_day": data.get("last_attempt_day"),
             "last_scan_at": data.get("last_scan_at"),
+            "regional_attempts": {
+                key: attempts.get(key) if isinstance(attempts.get(key), str)
+                else None for key in ("1", "2")
+            },
+            "public_groups_by_search_region": counts,
+            "regional_classification": "SEARCH_TERMS_NOT_VERIFIED_GEOGRAPHY",
         }
     except (DiscoveryBlocked, OSError, ValueError) as exc:
         return {"status": "BLOCKED", "reason": _redacted_reason(str(exc))}

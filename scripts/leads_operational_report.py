@@ -223,6 +223,12 @@ def _operation_state(path: Path) -> dict[str, Any]:
             "pending_join_request_outcomes": len(
                 state.get("pending_join_requests", {})
             ),
+            "owner_notice_counts": {
+                status: sum(isinstance(record, dict)
+                            and record.get("owner_notice") == status
+                            for record in state.get("approved_join_requests_done", {}).values())
+                for status in ("ACCEPTED", "PENDING", "UNCERTAIN", "BLOCKED")
+            },
             "owned_channel_promotion_records": len(
                 state.get("owned_promotion", {})
             ),
@@ -295,6 +301,11 @@ def _events(path: Path, now: float) -> dict[str, Any]:
                     result["approvals_in_last_cycle"] = int(
                         isinstance(intake, dict)
                         and intake.get("status") == "APPROVED_REQUEST"
+                    )
+                    notice = intake.get("owner_notice") if isinstance(intake, dict) else None
+                    result["owner_notice_status"] = (
+                        notice if notice in {"ACCEPTED", "UNCERTAIN", "BLOCKED"}
+                        else "NOT_APPLICABLE"
                     )
             elif kind == "runtime_blocked":
                 result["reason"] = _redacted_reason(payload.get("reason"))

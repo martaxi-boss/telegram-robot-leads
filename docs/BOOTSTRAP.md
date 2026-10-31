@@ -100,7 +100,9 @@ autoriza operações sobre terceiros e não modifica o trabalhador em produção
   por outra conta sem repetição; reutiliza-se o trabalhador e a base atuais.
 - **Prova do código:** REA FINAL #41252089850 — 275 testes PASS,
   `git diff --check` PASS, execução interna exit 0 e `quiesced`.
-  A verificação foi feita numa cópia isolada. **Não houve deploy na VPS.**
+  A validação de código foi feita numa cópia isolada. **Deploy posterior
+  confirmado** pela execução GitHub Actions #41252848278; o resultado
+  operacional detalhado encontra-se em `docs/PROJECT-STATE.md`.
 - Faltam backups antigos da base users.db e do log telethon_adder.log
   para determinar se alguma conta adicionou pessoas no passado.
   Uma recuperação exigirá primeiro comparação em modo só de leitura.
@@ -147,6 +149,8 @@ de extração, fila e adição do motor antigo. As auditorias de evidência
 examinados. Ausência de dados antigos não equivale a prova de zero
 adições históricas. O comparativo funcional posterior encontra-se em
 [Motor antigo versus atual](HISTORICAL-ENGINE-COMPARISON-20261031.md).
-A melhoria de visibilidade da fila está implementada e testada no GitHub,
-mas ainda não foi instalada na VPS.
+A melhoria de visibilidade da fila está implementada, testada e instalada
+na VPS (deploy GitHub Actions #41252848278, SHA `d1accce671254d233ccbdc7e8bc5adcc69b7c347`).
+As duas sessões foram preservadas e o trabalhador PM2 reiniciado e ONLINE.
+A medição de um **ciclo novo com contadores** ainda carece de prova posterior.
 Consultar `docs/PROJECT-STATE.md` para a situação e proveniência.

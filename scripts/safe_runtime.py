@@ -35,7 +35,7 @@ from operation_policy import (
     save_state,
 )
 from telethon_sessions import DEFAULT_VAULT, ProbeBlocked, inspect, make_memory_client
-from public_group_discovery import DiscoveryBlocked, discover_daily
+from public_group_discovery import DiscoveryBlocked, discover_daily, read_catalog
 from member_groups import RegistryBlocked, read_registry, sync_one
 from organic_growth import (
     approve_pending_join_request,
@@ -562,8 +562,41 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
                 }
                 save_state(path, state)
 
-    for group in groups:
-        account = assigned_group_account(state, group)
+    # Operator-listed groups and discoveries use the same existing worker.
+    # Regional discovery can schedule each owner account independently.
+    candidates = [(assigned_group_account(state, group), group) for group in groups]
+    if discovery_enabled and regional_enabled:
+        try:
+            catalog = read_catalog()
+            for group, record in catalog["groups"].items():
+                if not GROUP_RE.fullmatch(group) or not isinstance(record, dict):
+                    continue
+                tags = record.get("matched_regions", [])
+                if not isinstance(tags, list):
+                    continue
+                for region, account in (("PT_ES", 1), ("EU_OTHER", 2)):
+                    if region in tags:
+                        candidates.append((account, group))
+        except DiscoveryBlocked as exc:
+            report["blocked"].append(
+                {"scope": "group_catalog", "reason": str(exc)})
+
+    handled = set()
+    attempted_accounts = set()
+    for account, group in candidates:
+        canonical = group.casefold()
+        pair = (account, canonical)
+        if pair in handled:
+            continue
+        handled.add(pair)
+        if (group_record(state, "joined_groups", account, canonical) is not None
+                or group_record(state, "pending_group_actions", account, canonical) is not None):
+            continue
+        # One attempted join per worker cycle and account, not per day.
+        # Keep real Telegram restrictions and the existing action interval.
+        if account in attempted_accounts:
+            continue
+        attempted_accounts.add(account)
         try:
             status = await _join_one(config, state, group, account)
             report["group_actions"].append(

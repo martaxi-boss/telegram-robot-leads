@@ -1,4 +1,10 @@
-# Robot Leads — fecho operacional e aprovação de grupos
+# Robot Leads — operação, revisão de grupos e diagnóstico
+
+**Nota de atualização, 31-10-2026:** este manual inclui comandos antigos
+de revisão manual e marcos históricos. As **regras funcionais atuais**
+estão em [BOOTSTRAP.md](BOOTSTRAP.md); o **estado de implantação** está em
+[PROJECT-STATE.md](PROJECT-STATE.md). Não interpretar limites ou
+agendamentos antigos deste manual como configuração atual.
 
 ## 1. O que já existe
 
@@ -28,9 +34,13 @@ Com a nova versão instalada na VPS, os comandos são executados em
 
 O último comando não se liga ao Telegram: inclui **apenas** o grupo público
 selecionado no ficheiro de allowlist do projeto, no cofre existente,
-validando propriedade e permissões. O trabalhador normal continuará a aplicar
-os limites de adesão a grupos e as restrições da plataforma. O programa não
-autoriza automaticamente todos os grupos encontrados nem altera outras apps.
+validando propriedade e permissões. É a via **manual opcional**.
+A implementação mais recente também pode encaminhar automaticamente os grupos
+públicos encontrados na pesquisa regional para a conta correspondente, no
+trabalhador existente, se as opções de descoberta estiverem ativas.
+**Não há um máximo diário fixo de adesões a grupos.** Existe controlo por
+(conta, grupo), espaçamento entre operações e respeito pelas restrições reais.
+Isto não adiciona pessoas ao grupo de destino e não altera outras aplicações.
 
 ## 3. Estado do serviço e prova de funcionamento
 
@@ -88,10 +98,11 @@ capacidade de adicionar pessoas ou de continuar online indefinidamente.
 ## 5. Evidência e limite da certificação
 
 GitHub Actions executa testes offline de relatório, privacidade, seleção,
-deduplicação e manipulação de ficheiros privados. **CI verde e instalação
-STAGED_NOT_STARTED não comprovam pesquisa online.** O temporizador já preparado
-para 20/10/2026 às 08h00 em Portugal continua responsável pelo arranque;
-não antecipar a ativação.
+deduplicação e manipulação de ficheiros privados. **CI verde não comprova
+implantação nem pesquisa real online.** O agendamento de 20-10-2026 às 08h00
+é um registo histórico, não uma instrução atual de arranque. Consultar a
+versão efetivamente instalada e o PM2 antes de qualquer conclusão. Em
+31-10-2026 a revisão da PR #47 tinha 272 testes PASS, sem deploy comprovado.
 
 O motor de adição direta está limitado a quem autorizou explicitamente entrar
 no grupo. Não inclui cópia em massa de listas de terceiros nem camuflagem do
@@ -99,9 +110,10 @@ comportamento para evitar controlos anti-spam do Telegram.
 
 ## 6. Correcoes preventivas propostas em 2026-10-23
 
-- A descoberta publica usa a conta 1. Se o estado persistente indicar uma
-  restricao da conta, o ciclo reporta `account_1_hard_stop` sem ligar ao
-  Telegram nem repetir uma pesquisa no dia seguinte. A remocao do bloqueio
+- **Histórico de 23-10-2026:** a descoberta usava a conta 1. Hoje a pesquisa
+  regional atribui PT/ES à conta 1 e os restantes termos europeus à conta 2.
+  Se o estado persistente indicar uma restricao da conta, o ciclo suspende
+  essa conta sem ligar ao Telegram ou repetir tentativas bloqueadas. A remocao do bloqueio
   requer reconciliacao operacional explicita; nunca ocorre por meia-noite.
 - O ficheiro `operation-state.json` existente deve ser um ficheiro regular,
   pertencente ao utilizador do processo, privado (sem permissoes de grupo ou

@@ -1,5 +1,14 @@
 # Telegram Robot Leads - owner protocol and implementation status (2026-10-19)
 
+> **Registo histórico datado, não especificação operacional vigente.**
+> Em 31-10-2026, a regra antiga de **um grupo por conta/dia** foi
+> substituída pelo funcionamento documentado em [BOOTSTRAP.md](BOOTSTRAP.md):
+> sem máximo fixo de adesões a grupos por dia, duas contas podem estar no
+> mesmo grupo, histórico por (conta, grupo). O restante conteúdo mantém o
+> contexto original de 19-10-2026 e não deve ser usado isoladamente para
+> configurar ou reinstalar o robô.
+
+
 ## Intent and protected assets
 
 Keep one Telegram Robot Leads project. Preserve both existing private user accounts,

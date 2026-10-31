@@ -79,6 +79,8 @@ class WorkerMembershipTests(unittest.TestCase):
             stack.enter_context(patch.object(
                 safe_runtime, "discover_daily", new=fake_discover))
             stack.enter_context(patch.object(
+                safe_runtime, "read_catalog", return_value={"groups": {}}))
+            stack.enter_context(patch.object(
                 safe_runtime, "sync_one", new=fake_sync))
             stack.enter_context(patch.object(
                 safe_runtime, "read_registry", side_effect=fake_registry))

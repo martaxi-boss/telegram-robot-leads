@@ -233,6 +233,17 @@ async def promote_owned_channel(
             await client.disconnect()
 
 
+def select_intake_account(state: dict) -> int:
+    """Choose the least-used of the two existing authorised administrators.
+
+    This is deterministic, not a fallback on Telegram account restrictions.
+    """
+    return min((sum(int(state["accounts"][str(number)][key])
+                    for key in ("member_adds", "join_request_approvals")),
+                number)
+               for number in (1, 2))[1]
+
+
 async def approve_pending_join_request(
     config: dict,
     model: dict,
@@ -250,6 +261,10 @@ async def approve_pending_join_request(
     """
     if not model["approve_join_requests"]:
         return _result("DISABLED")
+    # Do not use the second session to circumvent a restriction on either.
+    if any(state["accounts"][str(number)]["blocked"] for number in (1, 2)):
+        return _result("ACCOUNT_BLOCKED")
+    account_number = select_intake_account(state)
     now = time.time() if now is None else now
     if not 8 <= _hour(now, tz) < 22:
         return _result("OUTSIDE_JOIN_WINDOW")
@@ -262,16 +277,16 @@ async def approve_pending_join_request(
     if last_scan and now - last_scan < SCAN_INTERVAL_SECONDS:
         return _result("NEXT_SCAN_NOT_DUE")
     try:
-        check_action(state, 1, "join_request_approval", now=now)
+        check_action(state, account_number, "join_request_approval", now=now)
     except PolicyDeferred:
         return _result("POLICY_DEFERRED")
-    # Account 1 is the designated intake operator. Never switch accounts
-    # on account restrictions to bypass Telegram's safeguards.
+    # Keep the account selected for this request fixed; never switch after
+    # restrictions, rate limits or an uncertain remote outcome.
     # Mark the read attempt BEFORE the Telegram preflight. Permission/network
     # failures therefore receive a bounded 30-minute cooldown.
     state["join_request_last_scan"] = int(now)
     persist(state)
-    client = await connect(config, 1)
+    client = await connect(config, account_number)
     try:
         group = await asyncio.wait_for(client.get_entity(config["group"]), timeout=20)
         if getattr(group, "megagroup", False) is not True or getattr(group, "broadcast", False):
@@ -319,7 +334,7 @@ async def approve_pending_join_request(
             except (ValueError, TypeError):
                 continue
             state["pending_join_requests"][key] = {
-                "account": 1, "day": _day(now, tz),
+                "account": account_number, "day": _day(now, tz),
                 "group": config["group"].casefold(),
             }
             persist(state)
@@ -332,13 +347,15 @@ async def approve_pending_join_request(
             )
             if not isinstance(getattr(outcome, "updates", None), (list, tuple)):
                 raise PolicyBlocked("join_request_outcome_unknown_manual_review")
-            record_success(state, 1, "join_request_approval", now=now)
+            record_success(state, account_number, "join_request_approval", now=now)
             state["approved_join_requests_done"][key] = {
                 "status": "approved", "day": _day(now, tz),
+                "account": account_number,
             }
             state["pending_join_requests"].pop(key, None)
             persist(state)
-            return _result("APPROVED_REQUEST", approvals_accepted=1)
+            return _result("APPROVED_REQUEST", approvals_accepted=1,
+                           account=account_number)
         return _result("NO_PENDING_REQUESTS", approvals_accepted=0)
     finally:
         if client.is_connected():

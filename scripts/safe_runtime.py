@@ -41,6 +41,7 @@ from organic_growth import (
     approve_pending_join_request,
     promote_owned_channel,
     read_model,
+    select_intake_account,
 )
 
 GROUP_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
@@ -509,7 +510,8 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
         report["organic_growth"] = {}
         for label, action, account_number in (
             ("owned_promotion", promote_owned_channel, model["publisher_account"]),
-            ("join_requests", approve_pending_join_request, 1),
+            ("join_requests", approve_pending_join_request,
+             select_intake_account(state)),
         ):
             try:
                 outcome = await action(
@@ -660,6 +662,12 @@ def public_cycle_summary(report: dict) -> dict:
         ),
         "join_requests_approved": (
             1 if isinstance(intake, dict) and intake.get("status") == "APPROVED_REQUEST" else 0
+        ),
+        "join_request_approved_by_account": (
+            intake["account"] if isinstance(intake, dict)
+            and intake.get("status") == "APPROVED_REQUEST"
+            and type(intake.get("account")) is int
+            and intake["account"] in (1, 2) else None
         ),
         "group_actions_recorded": len(groups),
         "groups_joined": sum(item.get("status") == "joined" for item in groups),

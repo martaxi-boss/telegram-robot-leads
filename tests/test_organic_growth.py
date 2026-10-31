@@ -225,7 +225,8 @@ class OrganicGrowthTests(unittest.TestCase):
         with patch.object(growth.utils, "get_input_user", return_value=object()) as conversion:
             result = self.execute(growth.approve_pending_join_request, model, first)
         conversion.assert_called_once()
-        self.assertEqual(result, {"status": "APPROVED_REQUEST", "approvals_accepted": 1})
+        self.assertEqual(result, {"status": "APPROVED_REQUEST",
+                                  "approvals_accepted": 1, "account": 1})
         self.assertIn(("get_entity", TARGET), first.calls)
         self.assertNotIn(("get_entity", CHANNEL), first.calls)
         self.assertEqual(self.snapshots[1]["pending_join_requests"]["501"]["account"], 1)
@@ -234,6 +235,51 @@ class OrganicGrowthTests(unittest.TestCase):
         self.assertEqual(self.state["accounts"]["1"]["join_request_approvals"], 1)
         self.assertEqual(self.state["accounts"]["1"]["member_adds"], 0)
         self.assertTrue(first.disconnected)
+
+    def test_second_admin_handles_next_voluntary_request(self):
+        first = FakeClient(pending=[501])
+        second = FakeClient(pending=[502])
+        with patch.object(growth.utils, "get_input_user", return_value=object()):
+            self.execute(growth.approve_pending_join_request, configured(), first)
+            self.state["join_request_last_scan"] = 0
+            seen_accounts = []
+            async def connect(config, number):
+                seen_accounts.append(number)
+                return second
+            result = asyncio.run(growth.approve_pending_join_request(
+                self.config, configured(), self.state, self.persist, connect,
+                now=NOW + 3600))
+        self.assertEqual(seen_accounts, [2])
+        self.assertEqual(result, {"status": "APPROVED_REQUEST",
+                                  "approvals_accepted": 1, "account": 2})
+        self.assertEqual(self.state["accounts"]["1"]["join_request_approvals"], 1)
+        self.assertEqual(self.state["accounts"]["2"]["join_request_approvals"], 1)
+        self.assertEqual(self.state["approved_join_requests_done"]["502"]["account"], 2)
+        self.assertTrue(second.disconnected)
+
+    def test_blocked_account_does_not_trigger_other_account_failover(self):
+        self.state["accounts"]["1"]["blocked"] = True
+        self.state["accounts"]["1"]["reason"] = "TelegramRestriction"
+        connector = AsyncMock(side_effect=AssertionError("no bypass"))
+        result = asyncio.run(growth.approve_pending_join_request(
+            self.config, configured(), self.state, self.persist, connector,
+            now=NOW))
+        self.assertEqual(result["status"], "ACCOUNT_BLOCKED")
+        connector.assert_not_awaited()
+
+    def test_routing_counts_all_member_actions_and_does_not_touch_telegram(self):
+        self.state["accounts"]["1"]["member_adds"] = 2
+        self.assertEqual(growth.select_intake_account(self.state), 2)
+        self.state["accounts"]["2"]["join_request_approvals"] = 2
+        self.assertEqual(growth.select_intake_account(self.state), 1)
+
+    def test_account_number_is_visible_only_in_redacted_summary(self):
+        status = public_cycle_summary({"organic_growth": {
+            "join_requests": {"status": "APPROVED_REQUEST",
+                              "account": 2, "user_id": 778899}}})
+        self.assertEqual(status["join_request_approved_by_account"], 2)
+        self.assertNotIn("778899", json.dumps(status))
+        self.assertEqual(status["join_requests_approved"], 1)
 
     def test_no_pending_join_requests_is_a_real_zero_not_an_error(self):
         model = configured()

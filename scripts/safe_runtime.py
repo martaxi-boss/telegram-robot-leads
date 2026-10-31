@@ -476,7 +476,15 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
                             "account": account_number,
                             "status": "verified_existing_member",
                             "group_id": entry["group_id"],
+                            "membership_verified_at": entry["verified_at"],
                         }
+                    elif (isinstance(prior, dict)
+                          and prior.get("account") == account_number):
+                        # Upgrade an older join-RPC record only after an
+                        # independently observed own-account group dialog.
+                        prior["status"] = "verified_existing_member"
+                        prior["group_id"] = entry["group_id"]
+                        prior["membership_verified_at"] = entry["verified_at"]
                 save_state(path, state)
             except RegistryBlocked as exc:
                 region_results[label] = {

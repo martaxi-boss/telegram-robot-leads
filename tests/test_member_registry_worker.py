@@ -103,6 +103,18 @@ class WorkerMembershipTests(unittest.TestCase):
                          ["status"], "MEMBERSHIP_SCAN_COMPLETE")
         self.assertEqual(result["member_actions"], [])
 
+    def test_older_join_record_gains_stable_id_only_after_confirmation(self):
+        old = operation_policy.empty_state()
+        old["joined_groups"]["@publiciptv"] = {
+            "account": 1, "status": "joined",
+        }
+        operation_policy.save_state(self.state, old)
+        self.run_cycle()
+        verified = operation_policy.load_state(self.state)["joined_groups"]["@publiciptv"]
+        self.assertEqual(verified["status"], "verified_existing_member")
+        self.assertEqual(verified["group_id"], 123)
+        self.assertEqual(verified["membership_verified_at"], "2026-10-31")
+
     def test_one_account_failure_does_not_mask_other_account(self):
         result = self.run_cycle(failed_account=1)
         self.assertEqual(self.account_calls, [1, 2])

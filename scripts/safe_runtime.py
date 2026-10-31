@@ -377,7 +377,55 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     discovery_enabled = os.environ.get(
         "TELEGRAM_PUBLIC_DISCOVERY_ENABLED", "0"
     ).lower() in {"1", "true", "yes", "on"}
-    if discovery_enabled and state["accounts"]["1"]["blocked"]:
+    regional_enabled = os.environ.get(
+        "TELEGRAM_REGIONAL_PUBLIC_DISCOVERY_ENABLED", "0"
+    ).lower() in {"1", "true", "yes", "on"}
+    if discovery_enabled and regional_enabled:
+        # Account 1 handles PT/ES, account 2 the remaining European search
+        # terms. This searches PUBLIC GROUP METADATA only; no member listings,
+        # joins, messages, or additions are inferred from search results.
+        regional = {}
+        for account_number, region in ((1, "PT_ES"), (2, "EU_OTHER")):
+            if state["accounts"][str(account_number)]["blocked"]:
+                regional[str(account_number)] = {
+                    "status": "BLOCKED", "region": region,
+                    "reason": "account_hard_stop",
+                }
+                continue
+            try:
+                regional[str(account_number)] = await discover_daily(
+                    config, vault, account_number=account_number, region=region,
+                )
+            except DiscoveryBlocked as exc:
+                reason = str(exc)
+                regional[str(account_number)] = {
+                    "status": "BLOCKED", "region": region, "reason": reason,
+                }
+                if reason == "telegram_search_rate_or_account_restriction":
+                    block_account(state, account_number, reason)
+                    save_state(path, state)
+            except Exception as exc:
+                regional[str(account_number)] = {
+                    "status": "ERROR", "region": region,
+                    "reason": type(exc).__name__,
+                }
+        statuses = [item["status"] for item in regional.values()]
+        if "PUBLIC_DISCOVERY_COMPLETE" in statuses:
+            combined_status = "PUBLIC_DISCOVERY_COMPLETE"
+        elif all(value == "PUBLIC_DISCOVERY_ALREADY_ATTEMPTED_TODAY"
+                 for value in statuses):
+            combined_status = "PUBLIC_DISCOVERY_ALREADY_ATTEMPTED_TODAY"
+        else:
+            combined_status = "REGIONAL_DISCOVERY_PARTIAL"
+        report["public_discovery"] = {
+            "status": combined_status,
+            "regional_accounts": regional,
+            "new_public_groups": sum(
+                int(item.get("new_public_groups", 0))
+                for item in regional.values()
+            ),
+        }
+    elif discovery_enabled and state["accounts"]["1"]["blocked"]:
         # Discovery uses account 1. A durable Telegram hard stop applies to
         # searches too, including on later days and after worker restarts.
         report["public_discovery"] = {

@@ -1,3 +1,25 @@
+## Fase comparativa com REA FINAL — 31-10-2026
+
+Foi concluída a comparação do motor antigo com o runtime atual:
+[relatório técnico](HISTORICAL-ENGINE-COMPARISON-20261031.md).
+As provas são o commit histórico 18629988, inspeção de funções pelo
+REA #41249943708 e do runtime atual pelo REA #41251602824.
+O estado atual **já tem** histórico global de IDs e proteção contra
+duplicação de adições entre contas, incluindo após mudança de alias.
+A regra normativa continua em docs/BOOTSTRAP.md.
+
+**Pendente de implementação:** visibilidade agregada da fila de utilizadores
+autorizados, testes expressos de saída/reinício/segunda conta e eventual
+reconciliação de backups antigos. A tentativa de edição do código de
+trabalho foi bloqueada antes da execução pela ferramenta; não existe
+nesta fase commit de código nem certificação de nova funcionalidade.
+
+**Produção:** mantém SHA 8298503f7b21466ebf14b9f164f9e103c9c781e7
+como último confirmado. Não houve deploy, alteração de sessões ou leitura
+de participantes de terceiros durante esta fase.
+
+---
+
 # Current Project State
 
 ## Situação verificada e prioridade seguinte — 31-10-2026

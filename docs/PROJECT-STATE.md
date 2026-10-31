@@ -8,11 +8,18 @@ O estado atual **já tem** histórico global de IDs e proteção contra
 duplicação de adições entre contas, incluindo após mudança de alias.
 A regra normativa continua em docs/BOOTSTRAP.md.
 
-**Pendente de implementação:** visibilidade agregada da fila de utilizadores
-autorizados, testes expressos de saída/reinício/segunda conta e eventual
-reconciliação de backups antigos. A tentativa de edição do código de
-trabalho foi bloqueada antes da execução pela ferramenta; não existe
-nesta fase commit de código nem certificação de nova funcionalidade.
+**Implementado na branch de revisão:** contadores da fila de utilizadores
+autorizados e três testes adicionais de não divulgação de identidades,
+persistência entre reinícios e deduplicação por ID estável quando a
+segunda conta encontra um username diferente. Não foi criada nova base
+de dados, processo, ponte ou trabalhador.
+
+**Prova do código:** REA FINAL
+[#41252089850](https://github.com/martaxi-boss/VPS/actions/runs/41252089850),
+275 testes PASS (272 anteriores mais 3), `git diff --check` PASS,
+execução interna exit 0 e `settlement=quiesced`.
+A reconciliação de backups antigos mantém-se pendente.
+A implementação foi validada numa cópia isolada; **não houve deploy na VPS**.
 
 **Produção:** mantém SHA 8298503f7b21466ebf14b9f164f9e103c9c781e7
 como último confirmado. Não houve deploy, alteração de sessões ou leitura

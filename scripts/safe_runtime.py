@@ -279,7 +279,11 @@ async def _add_one(
         if type(numeric_id) is not int or numeric_id <= 0:
             raise ProbeBlocked("member_stable_identity_unavailable")
         stable_id = str(numeric_id)
-        if stable_id in state["approved_user_ids_done"]:
+        # The two authorised intake paths share a permanent identity history.
+        # A person approved through a join request must never be directly
+        # added again, including after departure or username change.
+        if (stable_id in state["approved_user_ids_done"]
+                or stable_id in state["approved_join_requests_done"]):
             state["approved_users_done"][canonical] = {
                 "account": account_number,
                 "status": "already_recorded_identity",

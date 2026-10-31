@@ -52,6 +52,7 @@ jobs:
           scripts/deploy_project_only.py
           scripts/activate_project_only.py
           scripts/public_group_discovery.py
+          scripts/member_groups.py
           scripts/public_group_review.py
           scripts/leads_operational_report.py
       - name: Local tests

@@ -20,6 +20,7 @@ from typing import Any
 
 from lead_health import PROCESS_NAME, read_pm2
 from organic_growth import preview as growth_preview
+from member_groups import REGISTRY_PATH, RegistryBlocked, read_registry
 from operation_policy import PolicyBlocked, load_state
 from public_group_discovery import DEFAULT_CATALOG, DiscoveryBlocked, read_catalog, public_join_url
 from safe_runtime import (
@@ -174,6 +175,31 @@ def _discovery(path: Path) -> dict[str, Any]:
         return {"status": "BLOCKED", "reason": _redacted_reason(str(exc))}
 
 
+def _memberships(path: Path) -> dict[str, Any]:
+    """Aggregate verified membership evidence without exposing group identities."""
+    if not path.exists():
+        return {"status": "NOT_CREATED", "confirmed_total": 0}
+    try:
+        data = read_registry(path)
+        accounts: dict[str, dict[str, Any]] = {}
+        for number in ("1", "2"):
+            account = data["accounts"][number]
+            records = account["groups"].values()
+            accounts[number] = {
+                "confirmed": sum(item["status"] == "MEMBER_CONFIRMED"
+                                 for item in records),
+                "not_reconfirmed": sum(item["status"] == "NOT_RECONFIRMED"
+                                       for item in records),
+                "last_attempt_day": account["last_attempt_day"],
+            }
+        return {"status": "READABLE",
+                "confirmed_total": sum(a["confirmed"] for a in accounts.values()),
+                "accounts": accounts,
+                "note": "OWN_DIALOGS_MATCHED_WITH_PUBLIC_DISCOVERY_ONLY"}
+    except (RegistryBlocked, OSError, ValueError) as exc:
+        return {"status": "BLOCKED", "reason": _redacted_reason(str(exc))}
+
+
 def _operation_state(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"status": "NOT_CREATED", "accounts_blocked": None,
@@ -299,6 +325,7 @@ def build_report(
     checkout: Path = DEFAULT_CHECKOUT,
     catalog_path: Path = DEFAULT_CATALOG,
     state_path: Path = DEFAULT_STATE,
+    membership_path: Path = REGISTRY_PATH,
     events_path: Path = DEFAULT_EVENT_JOURNAL,
     pm2_records: list[dict[str, Any]] | None = None,
     expected_sha: str | None = None,
@@ -312,6 +339,7 @@ def build_report(
     growth_model = _organic_model(vault, accounts)
     catalog = _discovery(catalog_path)
     operation = _operation_state(state_path)
+    memberships = _memberships(membership_path)
     event = _events(events_path, current)
     pm2 = _pm2(pm2_records)
     verified_live = (
@@ -369,6 +397,7 @@ def build_report(
         "readiness_indicators": readiness,
         "pm2": pm2,
         "public_discovery": catalog,
+        "group_memberships": memberships,
         "operation_state": operation,
         "supervisor": event,
     }
@@ -380,6 +409,7 @@ def main() -> int:
     parser.add_argument("--checkout", type=Path, default=DEFAULT_CHECKOUT)
     parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
     parser.add_argument("--state", type=Path, default=DEFAULT_STATE)
+    parser.add_argument("--memberships", type=Path, default=REGISTRY_PATH)
     parser.add_argument("--events", type=Path, default=DEFAULT_EVENT_JOURNAL)
     parser.add_argument("--expected-source", type=str)
     parser.add_argument("--with-pm2", action="store_true",
@@ -397,7 +427,8 @@ def main() -> int:
         records, pm2_error = read_pm2()
     report = build_report(
         vault=args.vault, checkout=args.checkout, catalog_path=args.catalog,
-        state_path=args.state, events_path=args.events,
+        state_path=args.state, membership_path=args.memberships,
+        events_path=args.events,
         pm2_records=records, expected_sha=args.expected_source,
     )
     if pm2_error:

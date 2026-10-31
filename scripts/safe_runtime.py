@@ -36,6 +36,7 @@ from operation_policy import (
 )
 from telethon_sessions import DEFAULT_VAULT, ProbeBlocked, inspect, make_memory_client
 from public_group_discovery import DiscoveryBlocked, discover_daily
+from member_groups import RegistryBlocked, read_registry, sync_one
 from organic_growth import (
     approve_pending_join_request,
     promote_owned_channel,
@@ -450,6 +451,57 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
                 "status": "ERROR", "reason": type(exc).__name__
             }
 
+    # Membership inventory is read-only and checks ONLY the owner's dialogs
+    # against already discovered public groups; it never lists participants.
+    report["group_memberships"] = {"status": "NOT_ENABLED"}
+    if discovery_enabled:
+        region_results = {}
+        for account_number in (1, 2):
+            label = str(account_number)
+            if state["accounts"][label]["blocked"]:
+                region_results[label] = {"status": "BLOCKED", "reason": "account_hard_stop"}
+                continue
+            try:
+                outcome = await sync_one(config, account_number, _connected_client)
+                region_results[label] = outcome
+                # A live dialog is stronger evidence than a successful join RPC.
+                # Preserve verified membership in the existing dedupe journal.
+                registry = read_registry()
+                for handle, entry in registry["accounts"][label]["groups"].items():
+                    if entry["status"] != "MEMBER_CONFIRMED":
+                        continue
+                    prior = state["joined_groups"].get(handle)
+                    if prior is None:
+                        state["joined_groups"][handle] = {
+                            "account": account_number,
+                            "status": "verified_existing_member",
+                            "group_id": entry["group_id"],
+                            "membership_verified_at": entry["verified_at"],
+                        }
+                    elif (isinstance(prior, dict)
+                          and prior.get("account") == account_number):
+                        # Upgrade an older join-RPC record only after an
+                        # independently observed own-account group dialog.
+                        prior["status"] = "verified_existing_member"
+                        prior["group_id"] = entry["group_id"]
+                        prior["membership_verified_at"] = entry["verified_at"]
+                save_state(path, state)
+            except RegistryBlocked as exc:
+                region_results[label] = {
+                    "status": "BLOCKED", "reason": str(exc),
+                }
+            except Exception as exc:
+                region_results[label] = {
+                    "status": "ERROR", "reason": type(exc).__name__,
+                }
+                if _is_hard_stop(exc):
+                    block_account(state, account_number, type(exc).__name__)
+                    save_state(path, state)
+        report["group_memberships"] = {
+            "status": "CHECKED",
+            "accounts": region_results,
+        }
+
     # The opt-in model uses only this existing worker, its lock and its durable
     # state. A missing private growth_model.json means ZERO growth-model writes.
     report["organic_growth"] = {"status": "NOT_CONFIGURED"}
@@ -533,6 +585,7 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
         "member_actions": report["member_actions"],
         "blocked": report["blocked"],
         "public_discovery": report.get("public_discovery"),
+        "group_memberships": report.get("group_memberships"),
         "organic_growth": report.get("organic_growth"),
     })
     return report

@@ -45,3 +45,11 @@ Para partilhar a ligação, abrir o grupo no Telegram: **Editar / Gerir grupo �
 As duas contas Telethon existentes têm direitos administrativos no grupo. O único trabalhador distribui aprovações de pedidos voluntários pela conta com menos ações de membros já autorizadas no dia, com desempate pela conta 1. Regista a conta usada para cada aprovação sem divulgar dados de utilizadores.
 
 A fila, o controlo de duplicados, a janela e o histórico são **comuns**. Uma restrição real em qualquer conta suspende as aprovações; a outra conta nunca é usada automaticamente para ultrapassar bloqueios ou FloodWait. Aprovação aceite não prova entrada efetiva.
+
+## Notificações de aprovação para as contas do proprietário
+
+Depois de um pedido de entrada voluntária ser **aceite pela API do Telegram**, o trabalhador existente envia uma única mensagem de estado às **Mensagens Guardadas** da conta administradora que aprovou esse pedido. Não contacta o requerente, não publica no grupo ou noutros canais e não cria outro bot nem trabalhador.
+
+A mensagem não inclui nome, `@username` nem ID do requerente. Explica expressamente que uma aprovação aceite **não comprova** ainda a presença efetiva do membro no grupo. O diário privado guarda o estado `ACCEPTED`, `UNCERTAIN` ou `BLOCKED` da mensagem, independentemente do resultado da aprovação. Um envio incerto não é repetido automaticamente, evitando mensagens duplicadas; bloqueios reais suspendem a conta responsável.
+
+Foram verificadas mensagens de teste nas Mensagens Guardadas **das duas contas** com leitura posterior. A aceitação pelo servidor não garante uma notificação push no telemóvel. A entrega através de um eventual supervisor externo continua a necessitar de validação separada; este mecanismo não altera o supervisor existente.

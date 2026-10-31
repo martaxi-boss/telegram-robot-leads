@@ -669,6 +669,12 @@ def public_cycle_summary(report: dict) -> dict:
             and type(intake.get("account")) is int
             and intake["account"] in (1, 2) else None
         ),
+        "owner_notice_status": (
+            intake["owner_notice"] if isinstance(intake, dict)
+            and intake.get("status") == "APPROVED_REQUEST"
+            and intake.get("owner_notice") in {"ACCEPTED", "UNCERTAIN", "BLOCKED"}
+            else "NOT_APPLICABLE"
+        ),
         "group_actions_recorded": len(groups),
         "groups_joined": sum(item.get("status") == "joined" for item in groups),
         "member_actions_recorded": len(members),

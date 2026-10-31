@@ -41,6 +41,7 @@ from operation_policy import (
     PolicyDeferred,
     check_action,
     record_success,
+    block_account,
 )
 from telethon_sessions import ProbeBlocked
 
@@ -244,6 +245,26 @@ def select_intake_account(state: dict) -> int:
                for number in (1, 2))[1]
 
 
+async def _send_approval_self_notice(client: Any, target: str, account_number: int) -> bool:
+    """Send one private status notice to the owner's Saved Messages.
+
+    Never contacts the requester or other groups and does not disclose the
+    requester's identity. Telegram acceptance does not prove a mobile push.
+    """
+    if (type(account_number) is not int or account_number not in (1, 2)
+            or not isinstance(target, str) or not GROUP_RE.fullmatch(target)):
+        raise PolicyBlocked("approval_notice_target_invalid")
+    message = (
+        f"Telegram Robot Leads | Conta {account_number}\n"
+        f"Pedido voluntario aprovado no grupo {target}.\n"
+        "Aprovacao aceite pelo Telegram; entrada efetiva ainda nao confirmada."
+    )
+    sent = await asyncio.wait_for(
+        client.send_message("me", message, link_preview=False), timeout=25,
+    )
+    return type(getattr(sent, "id", None)) is int and sent.id > 0
+
+
 async def approve_pending_join_request(
     config: dict,
     model: dict,
@@ -350,12 +371,27 @@ async def approve_pending_join_request(
             record_success(state, account_number, "join_request_approval", now=now)
             state["approved_join_requests_done"][key] = {
                 "status": "approved", "day": _day(now, tz),
-                "account": account_number,
+                "account": account_number, "owner_notice": "PENDING",
             }
             state["pending_join_requests"].pop(key, None)
             persist(state)
+            # Telegram already accepted the approval; a notification failure
+            # must never erase that fact or cause another approval attempt.
+            owner_notice = "UNCERTAIN"
+            try:
+                if await _send_approval_self_notice(client, config["group"], account_number):
+                    owner_notice = "ACCEPTED"
+            except (errors.FloodWaitError, errors.PeerFloodError,
+                    errors.UserRestrictedError) as exc:
+                block_account(state, account_number, type(exc).__name__)
+                owner_notice = "BLOCKED"
+            except Exception:
+                # The remote delivery outcome may be ambiguous; do not retry.
+                owner_notice = "UNCERTAIN"
+            state["approved_join_requests_done"][key]["owner_notice"] = owner_notice
+            persist(state)
             return _result("APPROVED_REQUEST", approvals_accepted=1,
-                           account=account_number)
+                           account=account_number, owner_notice=owner_notice)
         return _result("NO_PENDING_REQUESTS", approvals_accepted=0)
     finally:
         if client.is_connected():

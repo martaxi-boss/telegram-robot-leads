@@ -50,7 +50,7 @@ class RegionalWorkerTests(unittest.TestCase):
                 side_effect=self.events.append))
             stack.enter_context(patch.object(
                 safe_runtime, "discover_daily", new=discover))
-            stack.enter_context(patch.object(
+            mock_catalog = stack.enter_context(patch.object(
                 safe_runtime, "read_catalog",
                 return_value={"groups": catalog or {}}))
             no_join = stack.enter_context(patch.object(
@@ -60,6 +60,7 @@ class RegionalWorkerTests(unittest.TestCase):
             result = asyncio.run(safe_runtime._run_once_unlocked(self.vault))
             self.join_calls = [(c.args[2], c.args[3])
                                for c in no_join.await_args_list]
+            self.catalog_call_args = list(mock_catalog.call_args_list)
             if not catalog:
                 no_join.assert_not_awaited()
             no_add.assert_not_awaited()
@@ -91,6 +92,10 @@ class RegionalWorkerTests(unittest.TestCase):
             ("@publiciptv", 1), ("@publiciptv", 2),
         ])
         self.assertEqual(len(result["group_actions"]), 2)
+        self.assertEqual(len(self.catalog_call_args), 1)
+        self.assertEqual(
+            self.catalog_call_args[0].args, (safe_runtime.DEFAULT_CATALOG,)
+        )
 
     def test_rate_limit_stops_only_affected_account(self):
         async def discover(config, vault, *, account_number, region):

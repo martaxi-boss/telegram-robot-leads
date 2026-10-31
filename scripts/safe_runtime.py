@@ -35,7 +35,7 @@ from operation_policy import (
     save_state,
 )
 from telethon_sessions import DEFAULT_VAULT, ProbeBlocked, inspect, make_memory_client
-from public_group_discovery import DiscoveryBlocked, discover_daily, read_catalog
+from public_group_discovery import DiscoveryBlocked, discover_daily, read_catalog, DEFAULT_CATALOG
 from member_groups import RegistryBlocked, read_registry, sync_one
 from organic_growth import (
     approve_pending_join_request,
@@ -567,7 +567,7 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
     candidates = [(assigned_group_account(state, group), group) for group in groups]
     if discovery_enabled and regional_enabled:
         try:
-            catalog = read_catalog()
+            catalog = read_catalog(DEFAULT_CATALOG)
             for group, record in catalog["groups"].items():
                 if not GROUP_RE.fullmatch(group) or not isinstance(record, dict):
                     continue

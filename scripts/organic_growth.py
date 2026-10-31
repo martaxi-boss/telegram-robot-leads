@@ -345,8 +345,15 @@ async def approve_pending_join_request(
             if type(user_id) is not int or user_id <= 0:
                 continue
             key = str(user_id)
-            if key in state["approved_join_requests_done"]:
+            # A past authorised direct addition or voluntary approval is
+            # terminal for both accounts, including after the person leaves.
+            if (key in state["approved_join_requests_done"]
+                    or key in state["approved_user_ids_done"]):
                 continue
+            # Never cross over an ambiguous direct-add attempt with an
+            # approval from the other account.
+            if key in state["pending_member_ids"]:
+                return _result("PENDING_MANUAL_RECONCILIATION")
             user = pending_users.get(user_id)
             if user is None or getattr(user, "bot", False) or getattr(user, "deleted", False):
                 continue

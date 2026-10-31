@@ -11,7 +11,8 @@ Este ficheiro regista as regras acordadas pelo proprietário. Não cria um novo 
 - **As duas contas podem pertencer ao mesmo grupo público.**
 - O histórico de adesões e os resultados incertos são separados por **(conta, grupo)**, usando uma base partilhada. Nunca repetir uma tentativa confirmada ou incerta da mesma conta. Os registos válidos do formato antigo continuam a ser reconhecidos.
 - A descoberta pública identifica grupos. A entrada de uma conta num grupo é uma operação separada e deve ser confirmada; ausência num diálogo parcial não prova que a conta abandonou um grupo.
-- A passagem automática dos grupos descobertos para a fila de adesões deve manter a divisão regional e não confundir pesquisa com entrada efetiva.
+- Os grupos públicos descobertos com etiqueta PT_ES são encaminhados para a conta 1; os de EU_OTHER, para a conta 2. Se um grupo for identificado nas duas pesquisas, ambas podem tentar aderir, cada uma apenas uma vez.
+- O único trabalhador agenda no máximo uma tentativa de entrada por conta em cada ciclo, sem impor um máximo diário. O histórico de membros de grupos é sempre separado por conta. Uma pesquisa concluída não significa que a adesão foi aceite.
 
 ## Sistema existente
 

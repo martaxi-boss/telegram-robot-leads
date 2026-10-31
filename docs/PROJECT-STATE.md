@@ -1,5 +1,40 @@
 # Current Project State
 
+## Situação verificada e prioridade seguinte — 31-10-2026
+
+**Regra funcional atual:** `docs/BOOTSTRAP.md` é a fonte de verdade. Foi
+acrescentada a secção **«Motor antigo: recuperação do conhecimento»**, que
+distingue código histórico recuperado, experiência relatada pelo
+proprietário, ausência de provas antigas e tarefas de continuidade.
+
+**Instalação VPS:** versão `8298503f7b21466ebf14b9f164f9e103c9c781e7`,
+PM2 online, 2 sessões preservadas, pesquisa regional ligada. A auditoria
+REA [#41248796124](https://github.com/martaxi-boss/VPS/actions/runs/41248796124)
+confirma 3 grupos no catálogo e **1 adesão a grupo de origem registada pela
+conta 2**. Não há evidência independente de pertença pelo diálogo.
+
+**Adição de membros ao grupo do proprietário:** **zero ações registadas**
+no runtime atual e no diário de **16.730 eventos** consultado (REA
+[#41250971838](https://github.com/martaxi-boss/VPS/actions/runs/41250971838)).
+O motor histórico do commit
+[`18629988`](https://github.com/martaxi-boss/telegram-robot-leads/commit/1862998844782764d263ee8e49a1476a7f86beac)
+continha fila, filtros, métricas por sessão e processamento de adições.
+A base `users.db` e o log `telethon_adder.log` do legado não foram
+encontrados nos caminhos verificados; **não é possível concluir que nenhuma
+conta tenha realizado adições no passado**. A afirmação de aproximadamente
+10 membros/dia/conta é relato histórico, não medição recuperada.
+
+**Próximo passo:** auditoria comparativa somente de leitura, recuperação
+de mecanismos de histórico global e fila para admissões autorizadas,
+respeitando saídas e recusas, sem alterar trabalhador, ponte, sessões,
+backups ou outros projetos. **Nenhuma alteração operacional** resulta desta
+atualização documental.
+
+**O conteúdo a seguir é o estado histórico anterior e está desatualizado
+quanto ao deploy**; não usar o SHA antigo como instrução de instalação.
+
+---
+
 ## Atualização corrente — 31-10-2026 (não confundir código com deploy)
 
 **Regras operacionais:** consultar `docs/BOOTSTRAP.md`, referenciado em

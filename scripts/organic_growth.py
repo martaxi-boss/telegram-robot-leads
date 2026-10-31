@@ -52,7 +52,7 @@ MAX_PENDING_RESULTS = 20
 VOLUNTARY_LINK_FILE = "voluntary_group_join_link.json"
 VOLUNTARY_LINK_TITLE = "Leads voluntary request"
 MAX_EXISTING_INVITES = 80
-INVITE_LINK_RE = re.compile(r"https://t\\.me/(?:\\+|joinchat/)[A-Za-z0-9_-]{8,128}\\Z")
+INVITE_LINK_RE = re.compile(r"https://t\.me/(?:\+|joinchat/)[A-Za-z0-9_-]{8,128}\Z")
 
 # Original, non-deceptive copy; visible only in a channel explicitly selected
 # by its administrator. These are not unsolicited private messages.

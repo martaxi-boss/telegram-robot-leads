@@ -39,3 +39,9 @@ Os limites exatos de abuso e de FloodWait **não são garantidos** pelo Telegram
 Executar `python -m unittest discover -s tests -v` para testar criação, reutilização, deduplicação, permissões, expiração, segurança do ficheiro e regressões do modelo. Validar separadamente a ligação real, os dois números autenticados, a fila de adesões e o PM2, sem atribuir falsas entradas de membros.
 
 Para partilhar a ligação, abrir o grupo no Telegram: **Editar / Gerir grupo → Ligações de convite** e selecionar **Leads voluntary request**. A experiência exata depende da versão da aplicação Telegram.
+
+## Dois administradores, uma fila oficial
+
+As duas contas Telethon existentes têm direitos administrativos no grupo. O único trabalhador distribui aprovações de pedidos voluntários pela conta com menos ações de membros já autorizadas no dia, com desempate pela conta 1. Regista a conta usada para cada aprovação sem divulgar dados de utilizadores.
+
+A fila, o controlo de duplicados, a janela e o histórico são **comuns**. Uma restrição real em qualquer conta suspende as aprovações; a outra conta nunca é usada automaticamente para ultrapassar bloqueios ou FloodWait. Aprovação aceite não prova entrada efetiva.

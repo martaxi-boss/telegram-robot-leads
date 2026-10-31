@@ -39,6 +39,31 @@ A simples presença de alguém num grupo público, um username ou atividade rece
 4. **Dados históricos:** se for encontrado backup antigo de users.db/telethon_adder.log, primeiro verificar e comparar em modo só de leitura; não importar nem apagar nada automaticamente.
 5. **Governança:** testes, diff e PR antes de qualquer deploy. Não alterar a ponte, as sessões, o estado privado ou outros projetos.
 
-## Resultado desta passagem
+## Resultado desta passagem e verificação (31-10-2026)
 
-**Comparação feita e requisitos detalhados.** A tentativa de edição do runtime pelo REA foi bloqueada antes da execução por uma verificação de segurança da ferramenta; por isso **não há nova funcionalidade de fila implementada ou testada nesta passagem**. O código em produção permanece inalterado.
+**Funcionalidade de observabilidade implementada na branch**, mas **não
+instalada na VPS**: o trabalhador existente calcula um resumo agregado da
+lista de utilizadores explicitamente autorizados e junta-o ao diário
+do supervisor e ao relatório público do ciclo, sem identificadores.
+
+- `configured`: entradas autorizadas atualmente configuradas;
+- `waiting`: usernames ainda sem resultado/pedido pendente visível;
+- `recorded`: usernames com resultado já registado;
+- `uncertain`: usernames com resultado remoto pendente de reconciliação;
+- `global_recorded_ids`: número de IDs estáveis distintos entre adições
+  anteriores e pedidos de entrada já aprovados.
+
+O campo `waiting` **não é uma previsão de novos membros**: o username
+pode ser um alias novo de um ID antigo; a validação de identidade já
+existente continua a impedir a repetição entre as duas contas.
+
+**Prova REA FINAL:** [GitHub Actions #41252089850](https://github.com/martaxi-boss/VPS/actions/runs/41252089850),
+execução em cópia isolada, 275 testes PASS, `git diff --check` PASS,
+MCP com código de saída 0 e `settlement=quiesced`.
+Incluem três novos testes para contagem, ausência de dados pessoais
+no resumo e preservação do histórico entre reinícios, aliases e contas.
+
+O motor atual mantém as admissões limitadas aos utilizadores com autorização.
+O comparativo não reativou consultas de participantes de terceiros,
+adições não solicitadas, outro trabalhador ou outro motor. O deploy e
+a verificação de funcionamento na VPS são passos independentes.

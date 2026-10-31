@@ -147,5 +147,6 @@ de extração, fila e adição do motor antigo. As auditorias de evidência
 examinados. Ausência de dados antigos não equivale a prova de zero
 adições históricas. O comparativo funcional posterior encontra-se em
 [Motor antigo versus atual](HISTORICAL-ENGINE-COMPARISON-20261031.md).
-A melhoria de visibilidade da fila é apenas especificação, sem deploy.
+A melhoria de visibilidade da fila está implementada e testada no GitHub,
+mas ainda não foi instalada na VPS.
 Consultar `docs/PROJECT-STATE.md` para a situação e proveniência.

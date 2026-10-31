@@ -19,6 +19,88 @@ os registos históricos datados não a substituem.
 - **Pesquisa versus adesão:** a implementação atual limita a frequência de **pesquisas** a uma tentativa diária por conta (para não repetir a mesma consulta). Isto **não** significa um limite diário de grupos descobertos ou de adesões a grupos públicos.
 - A adesão automática a grupos encontrados exige que a descoberta regional esteja ativa na configuração do trabalhador. Um grupo descoberto não é, por si só, um grupo em que a conta já entrou.
 
+## Motor antigo: recuperação do conhecimento (31-10-2026)
+
+**Âmbito:** esta secção documenta o que foi encontrado no histórico, o relato
+do proprietário e o que falta investigar. Não reativa o motor antigo, não
+autoriza operações sobre terceiros e não modifica o trabalhador em produção.
+
+### Funcionalidades comprovadas no código histórico
+
+- O motor original sobrevive no commit
+  [`1862998844782764d263ee8e49a1476a7f86beac`](https://github.com/martaxi-boss/telegram-robot-leads/commit/1862998844782764d263ee8e49a1476a7f86beac),
+  em `main.py` (2.312 linhas). **Não é o ponto de entrada ativo** da VPS.
+- Existia descoberta e adesão a grupos de origem, consulta de participantes,
+  exclusão dos administradores/donos da origem, de bots, de contas eliminadas
+  e de perfis sem `@username`. Existiam ainda filtros de atividade recente
+  (`is_worth_scraping`) e de região/perfil.
+- O motor antigo guardava candidatos em `users.db`, com fila e estados,
+  repartição de trabalho por sessão, deduplicação por ID de utilizador,
+  métricas por conta e por dia (`adder_daily`) e registo de eventos.
+  Tratava estados finais para evitar repetir certas operações.
+- A rotina antiga chamava `InviteToChannelRequest` e contabilizava
+  `invite_ok`/`adds_ok`, bem como recusas de privacidade, ausência de
+  contacto mútuo e restrições do Telegram. **Não se comprovou um filtro que
+  garantisse antecipadamente o consentimento ou 100% de sucesso**.
+- Existiam temporizações variáveis e retoma da fila. Isso descreve a
+  implementação histórica, **não** uma licença para imitar pessoas ou
+  contornar proteção anti-spam.
+
+### Relato do proprietário — não confundir com prova técnica
+
+- O objetivo inicial era automatizar um trabalho manual: descobrir grupos
+  públicos relevantes e gerir uma fila de potenciais novos membros para
+  o grupo de destino, com ambas as contas e base comum.
+- O proprietário recorda aproximadamente **10 adições por dia por conta**
+  e uma taxa de sucesso muito elevada; esse número **não foi certificado**
+  pelos dados ainda disponíveis.
+- A preferência inequívoca é que **uma pessoa já adicionada ao grupo de
+  destino não seja novamente adicionada**, mesmo que depois saia. O mesmo
+  bloqueio de repetição aplica-se se a outra conta a encontrar noutro grupo.
+  Para essa memória, usar ID estável de utilizador quando obtido de modo
+  legítimo; `@username` isolado pode mudar.
+- Os candidatos recebiam estados de fila e de resultado, de modo que
+  reinícios, cruzamento entre contas e repetição de grupos não apagassem o
+  histórico. Esta é a regra funcional a preservar na arquitetura.
+
+### Estado comprovado hoje, sem extrapolações
+
+- Instalação VPS verificada: `8298503f7b21466ebf14b9f164f9e103c9c781e7`,
+  dois ficheiros de sessão, trabalhador PM2 online e descoberta regional
+  ativa (REA #41248796124, 31-10-2026).
+- Catálogo atual: **3 grupos públicos**; **1 adesão a grupo registada pela
+  conta 2** no diário. Isto é diferente de adicionar pessoas ao grupo de
+  destino; a pertença não foi confirmada independentemente pelo diálogo.
+- Estado atual: **0 ações de adição de membros concluídas** nas duas contas.
+  Auditoria a 16.730 eventos operacionais: **0 ações de membros registadas**
+  e 1 entrada em grupo de origem (REA #41250971838).
+- A base histórica `users.db` e `telethon_adder.log` **não foram localizadas**
+  nas pastas inspecionadas do projeto na VPS. Isso **não prova** que nunca
+  houve adições no passado, em especial pela conta 1.
+- O motor atual `scripts/safe_runtime.py` não executa a cadeia histórica
+  de consulta de participantes e adição automática de terceiros. Não
+  confundir testes de software (272 PASS) com prova de crescimento de membros.
+
+### Próxima fase de trabalho
+
+1. **Auditoria comparativa só de leitura** entre o motor histórico, o
+   runtime atual e os dados/backups existentes. Inventariar funções,
+   formatos de fila e eventos, sem executar ações na rede Telegram.
+2. Definir e testar um **histórico global durável**, independente das
+   duas contas, para pessoas já adicionadas, pessoas que saíram,
+   exclusões e decisões de não voltar a adicionar. Proteger estados
+   existentes; evitar novas tentativas após saída ou recusa.
+3. Recuperar componentes reutilizáveis de fila persistente, classificação,
+   deduplicação, relatórios e monitorização **para adesões autorizadas**.
+   `@username`, atividade recente ou acesso a um grupo público **não
+   demonstram autorização** da pessoa para entrar no grupo de destino.
+   Não reativar recolha indiscriminada de participantes, adições
+   não solicitadas nem disfarce de operações para evitar restrições.
+4. Validar com testes isolados e provas reais das ações permitidas,
+   sem modificar sessões, estado privado, backups, supervisor passivo
+   ou outros projetos. Distinguir código testado, versão instalada
+   e resultados observados. Só depois atualizar o estado do projeto.
+
 ## Sistema existente
 
 - Um único trabalhador PM2, duas sessões privadas, estado persistente partilhado e supervisor passivo; sem novas camadas, pontes ou coordenadores.
@@ -44,10 +126,17 @@ os registos históricos datados não a substituem.
 
 ## Estado de validação e implantação
 
-A revisão de grupos está integrada na `main` e passou 272 testes em execução
-isolada pelo REA FINAL (GitHub Actions #41239720587). **O deploy na VPS não
-está certificado para esta revisão:** o último SHA instalado confirmado em
-31-10-2026 era `3d53bf473fc0a37a4d8905f58a5bfff0948b3177`. Consultar
-`docs/PROJECT-STATE.md` para a verificação operacional mais recente.
-Não modificar sessões privadas, histórico persistente ou backups para
-sincronizar apenas documentação.
+O deploy de grupos e a correção de catálogo foram instalados e verificados
+na VPS com SHA `8298503f7b21466ebf14b9f164f9e103c9c781e7`.
+O ciclo do trabalhador voltou a `CYCLE` depois da correção do
+`TypeError` (REA #41243391285), e a verificação de 31-10-2026
+(REA #41248796124) confirmou PM2 online, duas sessões e uma adesão a
+grupo de origem registada, sem novas ações de membros.
+
+A inspeção histórica do código (REA #41249943708) confirmou as funções
+de extração, fila e adição do motor antigo. As auditorias de evidência
+(REA #41250761576, #41250832084, #41250916097 e #41250971838)
+**não localizaram sucesso histórico de adições de pessoas** nos dados
+examinados. Ausência de dados antigos não equivale a prova de zero
+adições históricas. O próximo passo é uma auditoria sem escrita.
+Consultar `docs/PROJECT-STATE.md` para a situação e proveniência.

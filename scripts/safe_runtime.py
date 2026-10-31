@@ -35,7 +35,7 @@ from operation_policy import (
     save_state,
 )
 from telethon_sessions import DEFAULT_VAULT, ProbeBlocked, inspect, make_memory_client
-from public_group_discovery import DiscoveryBlocked, discover_daily
+from public_group_discovery import DiscoveryBlocked, discover_daily, read_catalog
 from member_groups import RegistryBlocked, read_registry, sync_one
 from organic_growth import (
     approve_pending_join_request,
@@ -141,6 +141,24 @@ def assigned_group_account(state: dict, group: str) -> int:
     return assigned_account(group)
 
 
+def group_action_key(account_number: int, group: str) -> str:
+    """Separate membership histories for the owner's two accounts."""
+    if account_number not in (1, 2) or not GROUP_RE.fullmatch(group):
+        raise PolicyBlocked("invalid_group_or_account")
+    return f"{account_number}:{group.casefold()}"
+
+
+def group_record(state: dict, field: str, account_number: int, group: str):
+    """Read account-scoped and legacy records, never the other account's."""
+    scoped = state[field].get(group_action_key(account_number, group))
+    if scoped is not None:
+        return scoped
+    legacy = state[field].get(group.casefold())
+    if isinstance(legacy, dict) and legacy.get("account") == account_number:
+        return legacy
+    return None
+
+
 def _state_path() -> Path:
     return Path(
         os.environ.get("TELEGRAM_OPERATION_STATE", str(DEFAULT_STATE))
@@ -204,10 +222,11 @@ def _is_hard_stop(exc: BaseException) -> bool:
 async def _join_one(
     config: dict, state: dict, group: str, account_number: int
 ) -> str:
-    canonical = group.lower()
-    if canonical in state["joined_groups"]:
+    canonical = group.casefold()
+    key = group_action_key(account_number, canonical)
+    if group_record(state, "joined_groups", account_number, canonical) is not None:
         return "already_recorded"
-    if canonical in state["pending_group_actions"]:
+    if group_record(state, "pending_group_actions", account_number, canonical) is not None:
         raise PolicyBlocked("group_action_outcome_unknown_manual_reconciliation_required")
     check_action(state, account_number, "group_join")
     client = await _connected_client(config, account_number)
@@ -215,23 +234,23 @@ async def _join_one(
         entity = await asyncio.wait_for(client.get_entity(group), timeout=20)
         # Persist BEFORE contacting Telegram. A timeout after submission has
         # an unknowable remote outcome and must never trigger automatic replay.
-        state["pending_group_actions"][canonical] = {"account": account_number}
+        state["pending_group_actions"][key] = {"account": account_number}
         save_state(_state_path(), state)
         try:
             await asyncio.wait_for(client(JoinChannelRequest(entity)), timeout=25)
             record_success(state, account_number, "group_join")
-            state["joined_groups"][canonical] = {
+            state["joined_groups"][key] = {
                 "account": account_number,
                 "status": "joined",
             }
-            state["pending_group_actions"].pop(canonical, None)
+            state["pending_group_actions"].pop(key, None)
             return "joined"
         except errors.UserAlreadyParticipantError:
-            state["joined_groups"][canonical] = {
+            state["joined_groups"][key] = {
                 "account": account_number,
                 "status": "already_member",
             }
-            state["pending_group_actions"].pop(canonical, None)
+            state["pending_group_actions"].pop(key, None)
             return "already_member"
     except Exception as exc:
         if _is_hard_stop(exc):
@@ -475,21 +494,24 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
                 for handle, entry in registry["accounts"][label]["groups"].items():
                     if entry["status"] != "MEMBER_CONFIRMED":
                         continue
-                    prior = state["joined_groups"].get(handle)
+                    key = group_action_key(account_number, handle)
+                    prior = group_record(state, "joined_groups", account_number, handle)
                     if prior is None:
-                        state["joined_groups"][handle] = {
+                        state["joined_groups"][key] = {
                             "account": account_number,
                             "status": "verified_existing_member",
                             "group_id": entry["group_id"],
                             "membership_verified_at": entry["verified_at"],
                         }
-                    elif (isinstance(prior, dict)
-                          and prior.get("account") == account_number):
-                        # Upgrade an older join-RPC record only after an
-                        # independently observed own-account group dialog.
+                    else:
                         prior["status"] = "verified_existing_member"
                         prior["group_id"] = entry["group_id"]
                         prior["membership_verified_at"] = entry["verified_at"]
+                        state["joined_groups"][key] = prior
+                        legacy = state["joined_groups"].get(handle)
+                        if (isinstance(legacy, dict)
+                                and legacy.get("account") == account_number):
+                            state["joined_groups"].pop(handle)
                 save_state(path, state)
             except RegistryBlocked as exc:
                 region_results[label] = {
@@ -540,8 +562,41 @@ async def _run_once_unlocked(vault: Path = DEFAULT_VAULT) -> dict:
                 }
                 save_state(path, state)
 
-    for group in groups:
-        account = assigned_group_account(state, group)
+    # Operator-listed groups and discoveries use the same existing worker.
+    # Regional discovery can schedule each owner account independently.
+    candidates = [(assigned_group_account(state, group), group) for group in groups]
+    if discovery_enabled and regional_enabled:
+        try:
+            catalog = read_catalog()
+            for group, record in catalog["groups"].items():
+                if not GROUP_RE.fullmatch(group) or not isinstance(record, dict):
+                    continue
+                tags = record.get("matched_regions", [])
+                if not isinstance(tags, list):
+                    continue
+                for region, account in (("PT_ES", 1), ("EU_OTHER", 2)):
+                    if region in tags:
+                        candidates.append((account, group))
+        except DiscoveryBlocked as exc:
+            report["blocked"].append(
+                {"scope": "group_catalog", "reason": str(exc)})
+
+    handled = set()
+    attempted_accounts = set()
+    for account, group in candidates:
+        canonical = group.casefold()
+        pair = (account, canonical)
+        if pair in handled:
+            continue
+        handled.add(pair)
+        if (group_record(state, "joined_groups", account, canonical) is not None
+                or group_record(state, "pending_group_actions", account, canonical) is not None):
+            continue
+        # One attempted join per worker cycle and account, not per day.
+        # Keep real Telegram restrictions and the existing action interval.
+        if account in attempted_accounts:
+            continue
+        attempted_accounts.add(account)
         try:
             status = await _join_one(config, state, group, account)
             report["group_actions"].append(

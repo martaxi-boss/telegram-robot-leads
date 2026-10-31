@@ -79,6 +79,8 @@ class WorkerMembershipTests(unittest.TestCase):
             stack.enter_context(patch.object(
                 safe_runtime, "discover_daily", new=fake_discover))
             stack.enter_context(patch.object(
+                safe_runtime, "read_catalog", return_value={"groups": {}}))
+            stack.enter_context(patch.object(
                 safe_runtime, "sync_one", new=fake_sync))
             stack.enter_context(patch.object(
                 safe_runtime, "read_registry", side_effect=fake_registry))
@@ -96,9 +98,9 @@ class WorkerMembershipTests(unittest.TestCase):
         self.assertEqual(self.account_calls, [1, 2])
         self.assertEqual(result["group_memberships"]["status"], "CHECKED")
         state = operation_policy.load_state(self.state)
-        self.assertEqual(state["joined_groups"]["@publiciptv"]["account"], 1)
-        self.assertEqual(state["joined_groups"]["@euiptv"]["account"], 2)
-        self.assertEqual(state["joined_groups"]["@publiciptv"]["group_id"], 123)
+        self.assertEqual(state["joined_groups"]["1:@publiciptv"]["account"], 1)
+        self.assertEqual(state["joined_groups"]["2:@euiptv"]["account"], 2)
+        self.assertEqual(state["joined_groups"]["1:@publiciptv"]["group_id"], 123)
         self.assertEqual(self.events[0]["group_memberships"]["accounts"]["1"]
                          ["status"], "MEMBERSHIP_SCAN_COMPLETE")
         self.assertEqual(result["member_actions"], [])
@@ -110,7 +112,7 @@ class WorkerMembershipTests(unittest.TestCase):
         }
         operation_policy.save_state(self.state, old)
         self.run_cycle()
-        verified = operation_policy.load_state(self.state)["joined_groups"]["@publiciptv"]
+        verified = operation_policy.load_state(self.state)["joined_groups"]["1:@publiciptv"]
         self.assertEqual(verified["status"], "verified_existing_member")
         self.assertEqual(verified["group_id"], 123)
         self.assertEqual(verified["membership_verified_at"], "2026-10-31")
@@ -123,8 +125,8 @@ class WorkerMembershipTests(unittest.TestCase):
         self.assertEqual(result["group_memberships"]["accounts"]["2"]
                          ["confirmed"], 1)
         state = operation_policy.load_state(self.state)
-        self.assertNotIn("@publiciptv", state["joined_groups"])
-        self.assertIn("@euiptv", state["joined_groups"])
+        self.assertNotIn("1:@publiciptv", state["joined_groups"])
+        self.assertIn("2:@euiptv", state["joined_groups"])
 
 
 if __name__ == "__main__":

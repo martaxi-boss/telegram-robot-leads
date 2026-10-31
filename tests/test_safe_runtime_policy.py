@@ -18,18 +18,18 @@ import safe_runtime
 
 
 class OperationPolicyTests(unittest.TestCase):
-    def test_per_account_group_limit_is_one(self):
+    def test_no_fixed_daily_group_join_cap(self):
         state = policy.empty_state()
-        state["accounts"]["1"]["group_joins"] = 1
-        with self.assertRaises(policy.PolicyDeferred):
-            policy.check_action(state, 1, "group_join", now=10000)
+        state["accounts"]["1"]["group_joins"] = 30
+        state["accounts"]["2"]["group_joins"] = 20
+        policy.check_action(state, 1, "group_join", now=10000)
+        policy.check_action(state, 2, "group_join", now=10000)
 
-    def test_project_group_limit_is_two(self):
+    def test_group_joins_still_respect_spacing(self):
         state = policy.empty_state()
-        state["accounts"]["1"]["group_joins"] = 1
-        state["accounts"]["2"]["group_joins"] = 1
+        state["accounts"]["1"]["last_action"] = 1000
         with self.assertRaises(policy.PolicyDeferred):
-            policy.check_action(state, 1, "group_join", now=10000)
+            policy.check_action(state, 1, "group_join", now=1001)
 
     def test_per_account_member_limit_is_ten(self):
         state = policy.empty_state()

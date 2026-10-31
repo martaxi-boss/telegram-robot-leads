@@ -24,7 +24,7 @@ class RegionalWorkerTests(unittest.TestCase):
         self.calls = []
         self.events = []
 
-    def _run(self, discover):
+    def _run(self, discover, catalog=None):
         config = {
             "group": "@iptvpncode", "api_source": "private_app_credentials",
             "entries": [{"session": "first"}, {"session": "second"}],
@@ -50,12 +50,18 @@ class RegionalWorkerTests(unittest.TestCase):
                 side_effect=self.events.append))
             stack.enter_context(patch.object(
                 safe_runtime, "discover_daily", new=discover))
+            stack.enter_context(patch.object(
+                safe_runtime, "read_catalog",
+                return_value={"groups": catalog or {}}))
             no_join = stack.enter_context(patch.object(
                 safe_runtime, "_join_one", new_callable=AsyncMock))
             no_add = stack.enter_context(patch.object(
                 safe_runtime, "_add_one", new_callable=AsyncMock))
             result = asyncio.run(safe_runtime._run_once_unlocked(self.vault))
-            no_join.assert_not_awaited()
+            self.join_calls = [(c.args[2], c.args[3])
+                               for c in no_join.await_args_list]
+            if not catalog:
+                no_join.assert_not_awaited()
             no_add.assert_not_awaited()
         return result
 
@@ -72,6 +78,19 @@ class RegionalWorkerTests(unittest.TestCase):
                          "PUBLIC_DISCOVERY_COMPLETE")
         self.assertEqual(result["member_actions"], [])
         self.assertEqual(self.events[0]["kind"], "cycle")
+
+    def test_discovered_group_can_be_joined_by_both_accounts(self):
+        async def discover(config, vault, *, account_number, region):
+            return {"status": "PUBLIC_DISCOVERY_ALREADY_ATTEMPTED_TODAY",
+                    "new_public_groups": 0}
+
+        result = self._run(discover, catalog={
+            "@publiciptv": {"matched_regions": ["PT_ES", "EU_OTHER"]},
+        })
+        self.assertEqual(self.join_calls, [
+            ("@publiciptv", 1), ("@publiciptv", 2),
+        ])
+        self.assertEqual(len(result["group_actions"]), 2)
 
     def test_rate_limit_stops_only_affected_account(self):
         async def discover(config, vault, *, account_number, region):

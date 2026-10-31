@@ -272,6 +272,34 @@ class SafeRuntimeInputTests(unittest.TestCase):
             self.assertEqual(state["accounts"]["2"]["member_adds"], 0)
         asyncio.run(check())
 
+    def test_previously_approved_join_request_never_causes_direct_add(self):
+        class FakeClient:
+            async def get_entity(self, _):
+                return object()
+            async def get_input_entity(self, _):
+                return SimpleNamespace(user_id=123456)
+            def is_connected(self):
+                return True
+            async def disconnect(self):
+                pass
+            def __call__(self, _):
+                raise AssertionError("no repeat call may reach Telegram")
+        async def check():
+            state = policy.empty_state()
+            state["approved_join_requests_done"]["123456"] = {
+                "account": 1, "status": "approved",
+            }
+            with patch.object(safe_runtime, "check_action"), patch.object(
+                safe_runtime, "_connected_client",
+                new=AsyncMock(return_value=FakeClient()),
+            ):
+                result = await safe_runtime._add_one(
+                    {"group": "@targetgroup"}, state, "@different_alias", 2,
+                )
+            self.assertEqual(result, "already_recorded_identity")
+            self.assertEqual(state["accounts"]["2"]["member_adds"], 0)
+        asyncio.run(check())
+
     def test_ambiguous_same_id_pending_is_never_retried(self):
         class FakeClient:
             async def get_entity(self, _):

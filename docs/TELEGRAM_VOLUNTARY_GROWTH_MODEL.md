@@ -53,3 +53,13 @@ Depois de um pedido de entrada voluntária ser **aceite pela API do Telegram**, 
 A mensagem não inclui nome, `@username` nem ID do requerente. Explica expressamente que uma aprovação aceite **não comprova** ainda a presença efetiva do membro no grupo. O diário privado guarda o estado `ACCEPTED`, `UNCERTAIN` ou `BLOCKED` da mensagem, independentemente do resultado da aprovação. Um envio incerto não é repetido automaticamente, evitando mensagens duplicadas; bloqueios reais suspendem a conta responsável.
 
 Foram verificadas mensagens de teste nas Mensagens Guardadas **das duas contas** com leitura posterior. A aceitação pelo servidor não garante uma notificação push no telemóvel. A entrega através de um eventual supervisor externo continua a necessitar de validação separada; este mecanismo não altera o supervisor existente.
+
+## Proteção global contra repetição de membros
+
+As duas contas consultam o mesmo estado duradouro. Uma identidade Telegram que já teve um resultado terminal numa adição expressamente autorizada ou numa aprovação de pedido voluntário é reconhecida **nas duas vias**. Não volta a ser processada por outra conta, por um `@username` diferente, nem após abandonar o grupo. Um resultado incerto de adição direta também impede a aprovação cruzada até reconciliação manual.
+
+O relatório operacional distingue `processed_authorised_add_identity_records`, `processed_voluntary_request_identity_records`, `distinct_processed_member_identities` (união dos dois conjuntos) e `pending_identity_reconciliation`. Mostra contagens e nunca identificadores pessoais. Quando o histórico atual está vazio, apresenta `CURRENT_MEMBER_IDENTITY_HISTORY_EMPTY`.
+
+**Limitação histórica:** a existência de 92 adições anteriores a setembro de 2026 foi relatada pelo proprietário, mas a base atualmente instalada ainda não comprovou a recuperação dos respetivos identificadores. Não presumir que os 92 estão protegidos contra repetição até a fonte anterior ser reconciliada. Não importar dados duvidosos nem eliminar cópias de segurança sem validação.
+
+O filtro de compatibilidade técnica não é equivalente à autorização de uma pessoa para entrar num grupo, e espaçar operações não constitui garantia contra restrições do Telegram. A execução atual mantém operações de adição direta limitadas a entradas explicitamente autorizadas.

@@ -89,6 +89,39 @@ class OperationalReportTests(unittest.TestCase):
         self.assertEqual(result["telegram_requests"], 0)
         self.assertEqual(result["members_added"], 0)
 
+    def test_shared_processed_identity_counts_are_distinct_and_private(self):
+        state = empty_state()
+        state["approved_user_ids_done"]["123456"] = {
+            "account": 1, "status": "added",
+        }
+        state["approved_join_requests_done"]["123456"] = {
+            "account": 2, "status": "approved",
+        }
+        state["approved_join_requests_done"]["654321"] = {
+            "account": 2, "status": "approved",
+        }
+        state["pending_member_ids"]["999999"] = {
+            "account": 1, "username": "@somebody",
+        }
+        save_state(self.state, state)
+        result = self.build()
+        record = result["operation_state"]
+        self.assertEqual(record["distinct_processed_member_identities"], 2)
+        self.assertEqual(record["processed_authorised_add_identity_records"], 1)
+        self.assertEqual(record["processed_voluntary_request_identity_records"], 2)
+        self.assertEqual(record["pending_identity_reconciliation"], 1)
+        self.assertNotIn("CURRENT_MEMBER_IDENTITY_HISTORY_EMPTY",
+                         result["readiness_indicators"])
+        public = json.dumps(result)
+        for user_id in ("123456", "654321", "999999"):
+            self.assertNotIn(user_id, public)
+
+    def test_zero_identity_history_is_a_reported_readiness_gap(self):
+        result = self.build()
+        self.assertEqual(result["operation_state"]["distinct_processed_member_identities"], 0)
+        self.assertIn("CURRENT_MEMBER_IDENTITY_HISTORY_EMPTY",
+                      result["readiness_indicators"])
+
     def test_secret_and_user_data_never_leak(self):
         output = json.dumps(self.build(), ensure_ascii=False)
         for secret in ("@secret_person", "@sensitive_person", "@secretGroup",

@@ -223,6 +223,19 @@ def _operation_state(path: Path) -> dict[str, Any]:
             "pending_join_request_outcomes": len(
                 state.get("pending_join_requests", {})
             ),
+            "processed_authorised_add_identity_records": len(
+                state["approved_user_ids_done"]
+            ),
+            "processed_voluntary_request_identity_records": len(
+                state["approved_join_requests_done"]
+            ),
+            "distinct_processed_member_identities": len(
+                set(state["approved_user_ids_done"])
+                | set(state["approved_join_requests_done"])
+            ),
+            "pending_identity_reconciliation": len(
+                set(state["pending_member_ids"]) | set(state["pending_join_requests"])
+            ),
             "owner_notice_counts": {
                 status: sum(isinstance(record, dict)
                             and record.get("owner_notice") == status
@@ -384,6 +397,9 @@ def build_report(
         readiness.append("PRIVATE_APPLICATION_CREDENTIALS_NOT_CONFIGURED")
     if action_queue.get("member_queue_status") == "EMPTY":
         readiness.append("NO_APPROVED_USERS_IN_DIRECT_ADD_QUEUE")
+    if (operation.get("status") == "READABLE"
+            and operation.get("distinct_processed_member_identities") == 0):
+        readiness.append("CURRENT_MEMBER_IDENTITY_HISTORY_EMPTY")
     if growth_model.get("status") == "NOT_CONFIGURED":
         readiness.append("ORGANIC_GROWTH_MODEL_NOT_CONFIGURED")
     if pm2.get("status") != "ONLINE":

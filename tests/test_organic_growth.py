@@ -267,6 +267,33 @@ class OrganicGrowthTests(unittest.TestCase):
         self.assertEqual(self.state["approved_join_requests_done"]["502"]["account"], 2)
         self.assertTrue(second.disconnected)
 
+    def test_prior_authorised_add_never_approves_same_id_again(self):
+        self.state["approved_user_ids_done"]["501"] = {
+            "account": 2, "status": "added",
+        }
+        first = FakeClient(pending=[501])
+        result = self.execute(growth.approve_pending_join_request,
+                              configured(), first)
+        self.assertEqual(result["status"], "NO_PENDING_REQUESTS")
+        self.assertEqual(self.state["accounts"]["1"]["join_request_approvals"], 0)
+        self.assertEqual(self.state["accounts"]["2"]["join_request_approvals"], 0)
+        self.assertEqual(first.messages, [])
+        self.assertFalse(any(name == "rpc" and code == "HideChatJoinRequestRequest"
+                             for name, code in first.calls))
+
+    def test_ambiguous_direct_add_blocks_duplicate_voluntary_approval(self):
+        self.state["pending_member_ids"]["501"] = {
+            "account": 1, "username": "@alreadychecked",
+        }
+        first = FakeClient(pending=[501])
+        result = self.execute(growth.approve_pending_join_request,
+                              configured(), first)
+        self.assertEqual(result["status"], "PENDING_MANUAL_RECONCILIATION")
+        self.assertEqual(self.state["accounts"]["1"]["join_request_approvals"], 0)
+        self.assertEqual(first.messages, [])
+        self.assertFalse(any(name == "rpc" and code == "HideChatJoinRequestRequest"
+                             for name, code in first.calls))
+
     def test_owner_notice_unknown_result_does_not_repeat_approval(self):
         first = FakeClient(pending=[501], send_result=SimpleNamespace(id=None))
         with patch.object(growth.utils, "get_input_user", return_value=object()):

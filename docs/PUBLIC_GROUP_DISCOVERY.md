@@ -7,9 +7,13 @@ uma das duas sessões Telethon existentes, sem novo bot, conta ou sessão.
 A pesquisa automática funciona dentro do trabalhador PM2 existente, se a
 opção TELEGRAM_PUBLIC_DISCOVERY_ENABLED=1 estiver ativa.
 
-Isto **não é extração de membros**: não enumera pessoas nem os respetivos
-IDs, não envia mensagens, não adere aos grupos encontrados e não adiciona
-terceiros ao grupo do proprietário. A adesão tem de ser voluntária.
+Isto **não é extração de membros**: a pesquisa isolada só consulta metadados
+públicos, sem enumerar pessoas, enviar mensagens ou adicionar membros ao grupo
+do proprietário. Na versão atual do **trabalhador PM2**, quando a descoberta
+regional está ativa, os grupos encontrados são encaminhados para tentativas
+de **entrada das próprias duas contas**. Isso não significa adicionar outras
+pessoas ao grupo do proprietário. Consultar `docs/BOOTSTRAP.md` para as
+regras atuais de adesão e deduplicação por conta.
 
 ## Configuração
 
@@ -23,8 +27,9 @@ terceiros ao grupo do proprietário. A adesão tem de ser voluntária.
   automaticamente os temas iptv portugal e iptv
 - A pesquisa pública devolve até 30 resultados por termo; o programa só
   conserva o nome público, título, URL e termo associado de supergrupos
-- No modo automático há no máximo uma tentativa por dia civil em
-  Europe/Lisbon; uma falha não gera repetições infinitas
+- No modo automático há no máximo uma tentativa de **pesquisa** por conta e
+  por dia civil (Europe/Lisbon), evitando consultas repetidas; **não existe
+  quota fixa diária para adesões das contas a grupos públicos**
 - As restrições de conta/rate limit do Telegram não são contornadas
 
 ## Comandos após instalar o novo commit na VPS
@@ -43,9 +48,14 @@ python3 scripts/public_group_discovery.py --list
 python3 scripts/public_group_discovery.py --once --query 'iptv portugal' --query 'iptv'
 ~~~
 
-No trabalhador normal a opção TELEGRAM_PUBLIC_DISCOVERY_ENABLED=1 inicia
-a pesquisa diária em conjunto com os ciclos regulares. Não altera as regras
-de adição autorizada de membros nem ativa envios de mensagens.
+No trabalhador normal, `TELEGRAM_PUBLIC_DISCOVERY_ENABLED=1` e
+`TELEGRAM_REGIONAL_PUBLIC_DISCOVERY_ENABLED=1` ativam a pesquisa regional
+e a sua integração no ciclo do trabalhador, com conta 1 para PT/ES e conta 2
+para os demais termos europeus. A conta pode entrar no grupo encontrado
+apenas se a plataforma o permitir. O histórico é por **(conta, grupo)**,
+não impede a outra conta de estar no mesmo grupo e não altera as regras de
+adição autorizada de membros nem ativa mensagens a terceiros.
+A documentação atual desta lógica é `docs/BOOTSTRAP.md`.
 
 ## Ligação de adesão sem BotFather
 

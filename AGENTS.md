@@ -5,6 +5,22 @@ Current live runtime: `main.py` delegates to `scripts/safe_runtime.py`; operatio
 
 This file is the repository-level agent entrypoint for `martaxi-boss/telegram-robot-leads`.
 
+## Operational bootstrap (owner rules, 2026-10-31)
+
+**Before changing discovery, account assignment, group joins or deduplication,
+read [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md).** That file is the single source of
+functional rules for the existing two-account worker. `docs/PROJECT-STATE.md`
+records observed repository/VPS status, which must not be confused with
+approved source rules. Older dated protocols remain historical evidence.
+
+Keep account 1 on PT/ES discovery and account 2 on other Europe; both may join
+the same public group, and their entry history is scoped to (account, group).
+No fixed daily quota for joining groups; Telegram limitations and worker pacing
+still apply. Do not create another framework or worker to express these rules.
+The daily cadence of **search queries** is not a daily cap on **group joins**.
+This instruction does not authorize third-party member scraping or unsolicited
+member additions. A merge/test PASS does not certify VPS deployment.
+
 Repository evidence, accepted governance records, source, certification evidence and live GitHub state take precedence over chat assertions, stale checkpoints and static SHA references when determining current truth.
 
 ## Canonical SSH / deployment ownership (owner decision, 2026-10-28)

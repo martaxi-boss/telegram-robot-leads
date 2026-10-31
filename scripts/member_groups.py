@@ -132,10 +132,14 @@ def _verified_groups(dialogs: list, catalog_groups: dict, target: str, day: str)
                 or handle not in discovered or type(group_id) is not int
                 or group_id <= 0):
             continue
+        tags = catalog_groups[handle].get("matched_regions", [])
+        tags = ([t for t in tags if t in ("PT_ES", "EU_OTHER")]
+                if isinstance(tags, list) else [])
         result[handle] = {
             "group_id": group_id,
             "status": "MEMBER_CONFIRMED",
             "verified_at": day,
+            "matched_search_regions": sorted(set(tags)),
         }
     return result
 

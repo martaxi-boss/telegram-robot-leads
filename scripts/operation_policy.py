@@ -14,8 +14,6 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-MAX_GROUP_JOINS_PER_ACCOUNT_DAY = 1
-MAX_GROUP_JOINS_PROJECT_DAY = 2
 MAX_MEMBER_ADDS_PER_ACCOUNT_DAY = 10
 MAX_MEMBER_ADDS_PROJECT_DAY = 20
 MIN_INTERVAL_SECONDS = 10 * 60
@@ -213,10 +211,8 @@ def check_action(state: dict, account_number: int, action_type: str, now: float 
         )
 
     if action_type == "group_join":
-        if int(account.get("group_joins", 0)) >= MAX_GROUP_JOINS_PER_ACCOUNT_DAY:
-            raise PolicyDeferred(f"account_{account_number}_group_daily_limit")
-        if project_total(state, "group_joins") >= MAX_GROUP_JOINS_PROJECT_DAY:
-            raise PolicyDeferred("project_group_daily_limit")
+        # Telegram restrictions and spacing apply; no daily group quota.
+        pass
     elif action_type in ("member_add", "join_request_approval"):
         # One shared activity budget: approving requested members must not
         # silently expand the already-approved 10/account and 20/project caps.

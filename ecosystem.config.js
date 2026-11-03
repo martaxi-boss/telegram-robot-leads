@@ -5,7 +5,7 @@
  * metadata searches only. The worker never enumerates third-party members
  * or auto-adds people from search results.
  */
-const cwd = "/opt/telegram-robot-leads";
+const cwd = "/srv/projects/telegram-robot-leads";
 
 module.exports = {
   apps: [
@@ -13,7 +13,7 @@ module.exports = {
       name: "telegram-robot-leads",
       cwd,
       script: "main.py",
-      interpreter: "/opt/telegram-robot-leads/.venv/bin/python",
+      interpreter: "/srv/projects/telegram-robot-leads/.venv/bin/python",
       args: "--loop --interval 60 --vault /root/project-secrets/telegram-robot-leads",
       autorestart: true,
       restart_delay: 5000,

@@ -3,7 +3,7 @@
 
 Does not create or restart PM2 processes, access other projects, overwrite
 private sessions, delete backups, or modify state. It can only modify the
-explicitly declared tracked runtime files under /opt/telegram-robot-leads.
+explicitly declared tracked runtime files under /srv/projects/telegram-robot-leads.
 A separately verified owner-scoped activation is required after staging.
 """
 
@@ -18,7 +18,7 @@ import stat
 import tarfile
 import tempfile
 
-ROOT = Path("/opt/telegram-robot-leads")
+ROOT = Path("/srv/projects/telegram-robot-leads")
 VAULT = Path("/root/project-secrets/telegram-robot-leads")
 MARKER = ".verified-source-commit"
 BACKUP_NAME = ".telegram-leads-release-backups"

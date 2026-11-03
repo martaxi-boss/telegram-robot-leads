@@ -40,3 +40,9 @@ users.db
 growth_metrics.sqlite3
 growth_metrics.sqlite3-*
 growth_metrics.lock
+
+# Project-local private state and archived VPS components (never publish)
+/private/
+/data/
+/archive/
+/optin/

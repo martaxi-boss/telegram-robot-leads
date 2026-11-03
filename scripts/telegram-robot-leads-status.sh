@@ -5,7 +5,7 @@ set -euo pipefail
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 python_bin="${PYTHON:-python3}"
 vault="${TELEGRAM_ROBOT_LEADS_VAULT:-/root/project-secrets/telegram-robot-leads}"
-metrics_root="${TELEGRAM_ROBOT_LEADS_METRICS_ROOT:-/opt/telegram-leads-optin}"
+metrics_root="${TELEGRAM_ROBOT_LEADS_METRICS_ROOT:-/opt/telegram-robot-leads/optin}"
 
 printf '=== Telegram Robot Leads: protected vault (metadata only) ===\n'
 "$python_bin" "$script_dir/lead_health.py" --root "$vault" --no-pm2

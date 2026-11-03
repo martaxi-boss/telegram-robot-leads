@@ -20,7 +20,7 @@ Ter um @username público não significa ter aceitado ser adicionado a outro gru
 ## 2. Consultar o catálogo e selecionar grupos
 
 Com a nova versão instalada na VPS, os comandos são executados em
-/opt/telegram-robot-leads com o ambiente Python existente:
+/srv/projects/telegram-robot-leads com o ambiente Python existente:
 
 ~~~bash
 .venv/bin/python scripts/public_group_discovery.py --list

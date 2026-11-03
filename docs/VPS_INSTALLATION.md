@@ -24,11 +24,15 @@ O GitHub guarda **apenas codigo, manifests, testes e documentacao**. A `.gitigno
 ## Pendencias de isolamento
 
 - O daemon PM2 continua global, em `/root/.pm2`, tambem utilizado por `iptvpn_bot`. A separacao dos processos foi respeitada nas migracoes, mas **a independencia do gestor PM2 ainda nao esta certificada**.
-- Em `/usr/local/sbin/telegram_leads_activate_20261020.py` existe um script de ativacao antigo, ainda com referencias anteriores. Avaliar a sua relacao com unidades e cron antes de mover ou retirar.
-- No repositorio `martaxi-boss/VPS`, o workflow de deploy historico `.github/workflows/telegram-leads-vps-stage-20261019.yml` ainda tem caminhos legados e um SHA pinned. Uma alteracao nesse workflow pode desencadear deploy automatico. **Nao executar a versao antiga sem atualizar e validar.**
+- O ativador de 20-10-2026 e as duas unidades systemd foram movidos para `/srv/projects/telegram-robot-leads/archive/legacy/20261020-activation/`. O temporizador expirado ficou desativado. [Prova #41723648731](https://github.com/martaxi-boss/VPS/actions/runs/41723648731).
+- Os quatro workflows historicos Telegram e o ativador de origem em `martaxi-boss/VPS` foram arquivados em `docs/archive/legacy-telegram-202610/`, fora das pastas executaveis. O deploy antigo tinha caminhos e SHAs desatualizados. [Commit 823a072d](https://github.com/martaxi-boss/VPS/commit/823a072dbb3377eca48b276e5d257a32960fe96f).
 - A ligacao `/opt/telegram-robot-leads` so deve ser retirada apos comprovacao de ausencia de referencias de arranque, scripts e processos.
 - A desinstalacao independente exige parar apenas o bot correspondente e seguir procedimento que exporte/guarde os dados privados, sem alterar o outro robot.
 
 ## Regra permanente
 
 Cada projeto GitHub tem codigo, runtime, fornecedores e estado exclusivos dentro da sua propria pasta. O Linux e o gestor de processos podem exigir ficheiros de integracao em caminhos padrao; inventariar esses ficheiros por proprietario e garantir que a desinstalacao de um projeto nao interrompe outro. **Nao alterar a logica operacional do Telegram Robot Leads durante tarefas de organizacao.**
+
+## Auditoria cruzada final
+
+A verificacao real [GitHub Actions #41724074992](https://github.com/martaxi-boss/VPS/actions/runs/41724074992) confirmou os dois bots online com os mesmos PID, duas sessoes presentes em `private/`, estado em `data/`, sete raizes reais de projeto em `/srv/projects/` e servicos principais ativos. O PM2 global permanece uma pendencia de isolamento; o REA FINAL e o Codex tambem continuam fisicamente fora das pastas canonicas e nao foram fundidos com outros projetos.

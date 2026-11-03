@@ -31,7 +31,7 @@ from safe_runtime import (
 )
 from telethon_sessions import DEFAULT_VAULT, ProbeBlocked, inspect
 
-DEFAULT_CHECKOUT = Path("/opt/telegram-robot-leads")
+DEFAULT_CHECKOUT = Path("/srv/projects/telegram-robot-leads")
 IDENTIFIER = re.compile(r"[A-Za-z0-9_:-]{1,80}\Z")
 SHA256 = re.compile(r"[0-9a-f]{40}\Z")
 MAX_EVENT_TAIL_BYTES = 65536

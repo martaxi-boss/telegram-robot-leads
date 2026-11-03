@@ -6,7 +6,7 @@ Autorização do proprietário, 27/10/2026: instalar e higienizar apenas o
 **Telegram Robot Leads**, sem alterações em nenhum outro projeto na VPS.
 
 Repositório: martaxi-boss/telegram-robot-leads
-Runtime: /opt/telegram-robot-leads
+Runtime: /srv/projects/telegram-robot-leads
 Cofre preservado: /root/project-secrets/telegram-robot-leads
 Estado preservado: /var/lib/telegram-robot-leads
 Worker único: telegram-robot-leads
@@ -72,7 +72,7 @@ de runtime. O workflow central está atualmente fixado na versão antiga.
 e não tentar contornar a verificação de versão do instalador.
 
 A instalação verifica paths e versões, modifica apenas os ficheiros
-permitidos em `/opt/telegram-robot-leads` e conserva backups privados
+permitidos em `/srv/projects/telegram-robot-leads` e conserva backups privados
 em `.telegram-leads-release-backups`. As sessões, `.env`,
 `accounts.json`, bases de dados, estado, journals e `.venv` são
 preservados.
@@ -80,25 +80,25 @@ preservados.
 ## Higienização
 
 A única remoção autorizada é bytecode Python *.pyc ou *.pyo dentro de
-/opt/telegram-robot-leads/__pycache__,
-/opt/telegram-robot-leads/scripts/__pycache__ ou
-/opt/telegram-robot-leads/tests/__pycache__.
+/srv/projects/telegram-robot-leads/__pycache__,
+/srv/projects/telegram-robot-leads/scripts/__pycache__ ou
+/srv/projects/telegram-robot-leads/tests/__pycache__.
 
 A limpeza bloqueia conteúdo inesperado ou symlinks. Não entra na .venv,
 noutros diretórios, nem elimina backups, sessões, logs ou histórico.
 Comando de inventário (sem alterações):
 
-    /usr/bin/python3 /opt/telegram-robot-leads/scripts/project_hygiene.py
+    /usr/bin/python3 /srv/projects/telegram-robot-leads/scripts/project_hygiene.py
 
 Comando de aplicação (após autorização explícita do operador):
 
-    /usr/bin/python3 /opt/telegram-robot-leads/scripts/project_hygiene.py --apply --confirm-telegram-only
+    /usr/bin/python3 /srv/projects/telegram-robot-leads/scripts/project_hygiene.py --apply --confirm-telegram-only
 
 ## Ativação, sem PM2 global
 
 O workflow central verifica que existe **exatamente um** worker com nome
-`telegram-robot-leads`, cwd `/opt/telegram-robot-leads`, script
-`/opt/telegram-robot-leads/main.py` e PM2 do proprietário correto
+`telegram-robot-leads`, cwd `/srv/projects/telegram-robot-leads`, script
+`/srv/projects/telegram-robot-leads/main.py` e PM2 do proprietário correto
 (`/root/.pm2`). Só então o script de ativação reinicia esse worker.
 Nenhum `pm2 restart all`, `pm2 delete`, `pm2 start` ou criação de
 novo daemon é autorizada. Se o estado for divergente, bloquear.

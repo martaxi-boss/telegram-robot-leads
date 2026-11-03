@@ -16,7 +16,7 @@ import re
 import stat
 import subprocess
 
-ROOT = Path("/opt/telegram-robot-leads")
+ROOT = Path("/srv/projects/telegram-robot-leads")
 PROCESS = "telegram-robot-leads"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 

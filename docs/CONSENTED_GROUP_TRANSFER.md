@@ -35,7 +35,7 @@ de pesquisa pública ou os dois bots de IPTV/Supervisor. Não arranca sozinha.
 
 Guardar no cofre já existente:
 
-/root/project-secrets/telegram-robot-leads/migration_optins.txt
+/srv/projects/telegram-robot-leads/private/migration_optins.txt
 
 Exemplo **fictício** do formato (não cria qualquer utilizador real):
 

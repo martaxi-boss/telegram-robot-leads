@@ -174,7 +174,7 @@ The older architecture assessment and original 49-test result below are **histor
 ## Current verified operational state (2026-10-18)
 
 - Official repo: `martaxi-boss/telegram-robot-leads`, previously labeled `TELEGRAM-IPTVPN` as an operational name. Do not confuse with an independent IPTV posting bot or the Project Leader Telegram Supervisor.
-- Canonical protected VPS vault `/root/project-secrets/telegram-robot-leads/` retains the two existing `.session` files and account configuration. The separate former Leads vault directory was removed by a verified rename, not by deleting/recreating credentials.
+- Canonical protected VPS vault `/srv/projects/telegram-robot-leads/private/` retains the two existing `.session` files and account configuration. The separate former Leads vault directory was removed by a verified rename, not by deleting/recreating credentials.
 - [Real two-account online verification](https://github.com/martaxi-boss/VPS/actions/runs/39166864689): both sessions authenticated, connected, identities confirmed, and phone numbers matched the vault account configuration. No members were added, no messages sent.
 - The direct SQLiteSession constructor failed with `ValueError` for these stored sessions under the probe Telethon version. A read-only four-column SQLite extraction into Telethon `MemorySession` succeeded for **both**, without mutating either original session.
 - [Last verified repository CI](https://github.com/martaxi-boss/telegram-robot-leads/actions/runs/39160879832) passed 49 offline tests; this does **not** certify the old 2,312-line direct-add `main.py`, which has only syntax checking in that CI.

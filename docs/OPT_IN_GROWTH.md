@@ -13,7 +13,7 @@ with independent credentials and processes.
 **Verified operational rename (2026-10-18):** the same project's credential
 directory was moved on the existing VPS `vps-32bea5b6` from the old
 `/root/project-secrets/TELEGRAM-IPTVPN/` location to its **current, canonical**
-`/root/project-secrets/telegram-robot-leads/` location. The same five protected
+`/srv/projects/telegram-robot-leads/private/` location. The same five protected
 files were preserved, including the existing `.env`, `accounts.json`, and two
 Telegram `.session` files. The old directory is now absent, and the separate
 `/root/project-secrets/iptvpn_bot/` vault remains untouched.
@@ -46,7 +46,7 @@ using it. Nothing in that audit consumed Telegram updates or logged secrets.
 
 The safe metrics modules are staged at `/srv/projects/telegram-robot-leads/optin/`.
 They have no runtime token installed; the existing protected
-`/root/project-secrets/telegram-robot-leads/.env` supplies Telethon API
+`/srv/projects/telegram-robot-leads/private/.env` supplies Telethon API
 credentials and the target group, **not a dedicated BotFather metrics token**.
 Real join-event tracking therefore remains inactive. Creating another worker
 must not be confused with renaming the existing project.
@@ -61,7 +61,7 @@ bash scripts/telegram-robot-leads-status.sh
 # This check is expected to BLOCK until a genuinely dedicated token exists.
 python3 /srv/projects/telegram-robot-leads/optin/scripts/growth_tracker.py \
   --check --root /srv/projects/telegram-robot-leads/optin \
-  --env-file /root/project-secrets/telegram-robot-leads/.env
+  --env-file /srv/projects/telegram-robot-leads/private/.env
 ```
 
 `--env-file` is supported by both `growth_tracker.py` and

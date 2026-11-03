@@ -14,20 +14,20 @@ module.exports = {
       cwd,
       script: "main.py",
       interpreter: "/srv/projects/telegram-robot-leads/.venv/bin/python",
-      args: "--loop --interval 60 --vault /root/project-secrets/telegram-robot-leads",
+      args: "--loop --interval 60 --vault /srv/projects/telegram-robot-leads/private",
       autorestart: true,
       restart_delay: 5000,
       max_restarts: 10,
       env: {
         TELEGRAM_OPERATION_STATE:
-          "/var/lib/telegram-robot-leads/operation-state.json",
+          "/srv/projects/telegram-robot-leads/data/operation-state.json",
         TELEGRAM_TZ: "Europe/Lisbon",
         TELEGRAM_GROUP_ALLOWLIST: "group_allowlist.txt",
         TELEGRAM_APPROVED_USERS: "approved_users.txt",
         TELEGRAM_PUBLIC_DISCOVERY_ENABLED: "1",
         TELEGRAM_REGIONAL_PUBLIC_DISCOVERY_ENABLED: "1",
         TELEGRAM_EVENT_JOURNAL:
-          "/var/lib/telegram-robot-leads/supervisor-events.jsonl",
+          "/srv/projects/telegram-robot-leads/data/supervisor-events.jsonl",
       },
     },
   ],

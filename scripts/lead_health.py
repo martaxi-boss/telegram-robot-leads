@@ -23,7 +23,7 @@ SAFE_DEFAULTS = {
     "TELEGRAM_TZ": "Europe/Lisbon",
     "TELEGRAM_GROUP_ALLOWLIST": "group_allowlist.txt",
     "TELEGRAM_APPROVED_USERS": "approved_users.txt",
-    "TELEGRAM_OPERATION_STATE": "/var/lib/telegram-robot-leads/operation-state.json",
+    "TELEGRAM_OPERATION_STATE": "/srv/projects/telegram-robot-leads/data/operation-state.json",
 }
 CREDENTIAL_KEYS = ("TELEGRAM_API_ID", "TELEGRAM_API_HASH", "API_ID", "API_HASH", "TELEGRAM_GROWTH_BOT_TOKEN")
 

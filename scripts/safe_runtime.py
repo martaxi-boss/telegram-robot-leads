@@ -46,10 +46,10 @@ from organic_growth import (
 
 GROUP_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
 USER_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
-DEFAULT_STATE = Path("/var/lib/telegram-robot-leads/operation-state.json")
+DEFAULT_STATE = Path("/srv/projects/telegram-robot-leads/data/operation-state.json")
 DEFAULT_GROUP_ALLOWLIST = "group_allowlist.txt"
 DEFAULT_APPROVED_USERS = "approved_users.txt"
-DEFAULT_EVENT_JOURNAL = Path("/var/lib/telegram-robot-leads/supervisor-events.jsonl")
+DEFAULT_EVENT_JOURNAL = Path("/srv/projects/telegram-robot-leads/data/supervisor-events.jsonl")
 
 
 def _private_operator_file(path: Path, vault: Path, required: bool = False) -> list[str]:

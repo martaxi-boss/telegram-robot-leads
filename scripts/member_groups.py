@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 from public_group_discovery import DEFAULT_CATALOG, read_catalog
 
-REGISTRY_PATH = Path("/var/lib/telegram-robot-leads/member-groups.json")
+REGISTRY_PATH = Path("/srv/projects/telegram-robot-leads/data/member-groups.json")
 GROUP_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
 MAX_DIALOGS = 400
 MAX_REGISTRY_BYTES = 2 * 1024 * 1024

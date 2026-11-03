@@ -19,7 +19,7 @@ import tarfile
 import tempfile
 
 ROOT = Path("/srv/projects/telegram-robot-leads")
-VAULT = Path("/root/project-secrets/telegram-robot-leads")
+VAULT = Path("/srv/projects/telegram-robot-leads/private")
 MARKER = ".verified-source-commit"
 BACKUP_NAME = ".telegram-leads-release-backups"
 MAX_FILE_BYTES = 2 * 1024 * 1024

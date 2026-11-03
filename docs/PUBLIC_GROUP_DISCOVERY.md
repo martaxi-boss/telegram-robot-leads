@@ -17,9 +17,9 @@ regras atuais de adesão e deduplicação por conta.
 
 ## Configuração
 
-- Cofre preservado: /root/project-secrets/telegram-robot-leads/
+- Cofre preservado: /srv/projects/telegram-robot-leads/private/
 - Processo existente: telegram-robot-leads (sem criar outro)
-- Catálogo: /var/lib/telegram-robot-leads/public-groups.json, privado,
+- Catálogo: /srv/projects/telegram-robot-leads/data/public-groups.json, privado,
   com permissões 0600 e escrita atómica
 - Temas opcionais: discovery_keywords.txt no cofre, privado com modo 0600,
   uma expressão por linha, máximo seis, comentários iniciados por #

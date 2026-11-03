@@ -6,7 +6,7 @@ This is **only** `martaxi-boss/telegram-robot-leads`. Historical
 `TELEGRAM-IPTVPN` labels refer to this same old leads project, not to any
 other IPTV posting bot or the Project Leader/Codex Supervisor.
 
-- The protected canonical vault is `/root/project-secrets/telegram-robot-leads/`,
+- The protected canonical vault is `/srv/projects/telegram-robot-leads/private/`,
   with `.env`, `accounts.json` and **two** protected Telethon `.session`
   files. The legacy old vault directory is absent.
 - [Live read-only two-account Telegram test](https://github.com/martaxi-boss/VPS/actions/runs/39166864689)
@@ -42,7 +42,7 @@ it cannot upgrade or write the original session SQLite database.
 
 ```bash
 python3 scripts/telethon_sessions.py \
-  --vault /root/project-secrets/telegram-robot-leads
+  --vault /srv/projects/telegram-robot-leads/private
 ```
 
 ### Real online test of BOTH existing accounts, without external effects
@@ -53,7 +53,7 @@ installed during the 2026-10-18 audit; don't assume this command can use it.
 
 ```bash
 python3 scripts/telethon_sessions.py \
-  --vault /root/project-secrets/telegram-robot-leads --online
+  --vault /srv/projects/telegram-robot-leads/private --online
 ```
 
 Run as the vault-owning user. Verifies one account at a time using only
@@ -77,7 +77,7 @@ request access.
 
 ```bash
 python3 scripts/telethon_sessions.py \
-  --vault /root/project-secrets/telegram-robot-leads \
+  --vault /srv/projects/telegram-robot-leads/private \
   --create-link "campaign_name" --confirm-link-creation
 ```
 

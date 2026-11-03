@@ -20,7 +20,7 @@ import stat
 
 from lead_health import read_env_names_and_values
 
-DEFAULT_VAULT = Path("/root/project-secrets/telegram-robot-leads")
+DEFAULT_VAULT = Path("/srv/projects/telegram-robot-leads/private")
 ANDROID_PUBLIC_APP = (4, "014b35b6184100b085b0d0572f9b5103")
 SESSION_NAME = re.compile(r"[A-Za-z0-9_-]{1,60}\Z")
 GROUP_NAME = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")

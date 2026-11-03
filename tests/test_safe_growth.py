@@ -125,7 +125,7 @@ class HealthTests(unittest.TestCase):
         self.assertNotIn('tail -', legacy)
         self.assertIn('--no-pm2', current)
         self.assertNotIn('--with-pm2', current)
-        self.assertIn('/root/project-secrets/telegram-robot-leads', current)
+        self.assertIn('/srv/projects/telegram-robot-leads/private', current)
         self.assertIn('--stats', current)
 
     def test_invalid_config_redacted(self):

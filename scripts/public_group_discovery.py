@@ -25,7 +25,7 @@ from telethon.tl.functions.contacts import SearchRequest
 
 from telethon_sessions import DEFAULT_VAULT, inspect, make_memory_client
 
-DEFAULT_CATALOG = Path("/var/lib/telegram-robot-leads/public-groups.json")
+DEFAULT_CATALOG = Path("/srv/projects/telegram-robot-leads/data/public-groups.json")
 KEYWORDS_FILE = "discovery_keywords.txt"
 GROUP_NAME = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
 MAX_KEYWORDS = 6

@@ -7,8 +7,8 @@ Autorização do proprietário, 27/10/2026: instalar e higienizar apenas o
 
 Repositório: martaxi-boss/telegram-robot-leads
 Runtime: /srv/projects/telegram-robot-leads
-Cofre preservado: /root/project-secrets/telegram-robot-leads
-Estado preservado: /var/lib/telegram-robot-leads
+Cofre preservado: /srv/projects/telegram-robot-leads/private
+Estado preservado: /srv/projects/telegram-robot-leads/data
 Worker único: telegram-robot-leads
 
 Não tocar no iptvpn_bot, Supervisor Project Leader, PINK IPTV, FADEGO,

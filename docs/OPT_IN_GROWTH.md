@@ -28,7 +28,7 @@ Some legacy source/configuration files still refer to the historical
 checkout. Those are **historical references, not the vault location**.
 No such runtime checkout or running Telegram Leads worker was observed on
 this VPS as of the 2026-10-18 audit. Do not start an old archived PM2 configuration. The tracked `ecosystem.config.js` now describes the canonical `telegram-robot-leads` worker, which still requires independent deployment readiness checks. Safe opt-in metrics files were independently
-staged (but **not started**) at `/opt/telegram-leads-optin/`; their runtime
+staged (but **not started**) at `/opt/telegram-robot-leads/optin/`; their runtime
 credentials and Telegram bot administrator permissions remain a separate
 activation check. Do not mistake Telethon API ID/hash for a BotFather bot token.
 
@@ -44,7 +44,7 @@ and it had group administrator and invitation permissions; **it is not an
 available dedicated metrics token**. Do not start a second `getUpdates` poller
 using it. Nothing in that audit consumed Telegram updates or logged secrets.
 
-The safe metrics modules are staged at `/opt/telegram-leads-optin/`.
+The safe metrics modules are staged at `/opt/telegram-robot-leads/optin/`.
 They have no runtime token installed; the existing protected
 `/root/project-secrets/telegram-robot-leads/.env` supplies Telethon API
 credentials and the target group, **not a dedicated BotFather metrics token**.
@@ -59,8 +59,8 @@ bash scripts/telegram-robot-leads-status.sh
 
 # Explicit external credentials path: no token is copied into /opt.
 # This check is expected to BLOCK until a genuinely dedicated token exists.
-python3 /opt/telegram-leads-optin/scripts/growth_tracker.py \
-  --check --root /opt/telegram-leads-optin \
+python3 /opt/telegram-robot-leads/optin/scripts/growth_tracker.py \
+  --check --root /opt/telegram-robot-leads/optin \
   --env-file /root/project-secrets/telegram-robot-leads/.env
 ```
 

@@ -22,7 +22,7 @@ from urllib.parse import quote
 
 from public_group_discovery import DEFAULT_CATALOG, DiscoveryBlocked, read_catalog
 
-DEFAULT_METRICS_DB = Path("/opt/telegram-robot-leads/optin/growth_metrics.sqlite3")
+DEFAULT_METRICS_DB = Path("/srv/projects/telegram-robot-leads/optin/growth_metrics.sqlite3")
 TARGET_RE = re.compile(r"@[A-Za-z][A-Za-z0-9_]{4,31}\Z")
 MAX_GROUP_RESULTS = 25
 MAX_CAMPAIGN_RESULTS = 50

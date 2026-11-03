@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 import stat
 
-CANONICAL_ROOT = Path("/opt/telegram-robot-leads")
+CANONICAL_ROOT = Path("/srv/projects/telegram-robot-leads")
 ALLOWED_PARENTS = (Path("."), Path("scripts"), Path("tests"))
 CACHE_NAME = "__pycache__"
 ALLOWED_EXTENSIONS = {".pyc", ".pyo"}

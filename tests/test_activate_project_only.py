@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import activate_project_only as activation
 
 SHA = "a" * 40
-PM2HOME = Path("/root/.pm2")
 
 
 class ProjectActivationTests(unittest.TestCase):
@@ -20,6 +19,7 @@ class ProjectActivationTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+        self.pm2_home = self.root / ".pm2"
         (self.root / ".verified-source-commit").write_text(SHA + "\n")
         self.active = patch.object(activation, "ROOT", self.root)
         self.active.start()
@@ -33,13 +33,21 @@ class ProjectActivationTests(unittest.TestCase):
             },
         }
 
+    def test_global_pm2_home_is_rejected(self):
+        with patch.object(activation, "_check_daemon_home",
+                          side_effect=AssertionError("Must not query global PM2")):
+            with self.assertRaisesRegex(
+                activation.ActivationBlocked, "pm2_home_not_project_private"
+            ):
+                activation.activate(Path("/root/.pm2"), SHA, apply=True)
+
     def test_no_pm2_query_when_commit_is_wrong(self):
         with patch.object(activation, "_check_daemon_home",
                           side_effect=AssertionError("Should not touch PM2")):
             with self.assertRaisesRegex(
                 activation.ActivationBlocked, "installed_commit_mismatch"
             ):
-                activation.activate(PM2HOME, "b" * 40, apply=True)
+                activation.activate(self.pm2_home, "b" * 40, apply=True)
 
     def test_no_pm2_query_when_daemon_is_unverified(self):
         with patch.object(activation, "_check_daemon_home",
@@ -51,14 +59,14 @@ class ProjectActivationTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     activation.ActivationBlocked, "not_verified"
                 ):
-                    activation.activate(PM2HOME, SHA, apply=True)
+                    activation.activate(self.pm2_home, SHA, apply=True)
 
     def test_dry_run_never_restarts_a_worker(self):
         with patch.object(activation, "_check_daemon_home", return_value=500), \
              patch.object(activation, "_read_worker", return_value=self.worker), \
              patch.object(activation.subprocess, "run",
                           side_effect=AssertionError("No restart during dry run")):
-            outcome = activation.activate(PM2HOME, SHA)
+            outcome = activation.activate(self.pm2_home, SHA)
         self.assertEqual(outcome["status"], "READY_FOR_TARGETED_RESTART")
 
     def test_activation_only_restarts_exact_telegram_leads_name(self):
@@ -66,10 +74,10 @@ class ProjectActivationTests(unittest.TestCase):
              patch.object(activation, "_read_worker", return_value=self.worker), \
              patch.object(activation.subprocess, "run",
                           return_value=SimpleNamespace(returncode=0)) as process:
-            outcome = activation.activate(PM2HOME, SHA, apply=True)
+            outcome = activation.activate(self.pm2_home, SHA, apply=True)
         process.assert_called_once()
         args = process.call_args.args[0]
-        self.assertEqual(args, ["pm2", "restart", "telegram-robot-leads"])
+        self.assertEqual(args, ["/usr/bin/node", str(self.root / "tools/pm2/bin/pm2"), "restart", "telegram-robot-leads"])
         self.assertNotIn("--update-env", args)
         self.assertEqual(outcome["status"], "PROJECT_WORKER_RESTARTED")
 
@@ -89,9 +97,9 @@ class ProjectActivationTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 activation.ActivationBlocked, "path_mismatch"
             ):
-                activation.activate(PM2HOME, SHA, apply=True)
+                activation.activate(self.pm2_home, SHA, apply=True)
         self.assertEqual(process.call_count, 1)
-        self.assertEqual(process.call_args.args[0], ["pm2", "jlist"])
+        self.assertEqual(process.call_args.args[0], ["/usr/bin/node", str(self.root / "tools/pm2/bin/pm2"), "jlist"])
 
     def test_pm2_listing_refuses_duplicate_worker_names(self):
         with patch.object(activation, "_check_daemon_home", return_value=500), \
@@ -101,7 +109,7 @@ class ProjectActivationTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 activation.ActivationBlocked, "missing_or_duplicate"
             ):
-                activation.activate(PM2HOME, SHA, apply=True)
+                activation.activate(self.pm2_home, SHA, apply=True)
         self.assertEqual(process.call_count, 1)
 
 

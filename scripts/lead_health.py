@@ -97,9 +97,34 @@ def file_evidence(path: Path) -> dict[str, Any]:
 
 
 def read_pm2() -> tuple[list[dict[str, Any]], str | None]:
+    private_root = Path("/srv/projects/telegram-robot-leads")
+    pm2_home = private_root / ".pm2"
+    cli = private_root / "tools/pm2/bin/pm2"
+    socket = pm2_home / "rpc.sock"
+    # Never auto-start a global or project daemon during a read-only report.
+    if (private_root.is_symlink() or pm2_home.is_symlink() or cli.is_symlink()
+            or not pm2_home.is_dir() or not cli.is_file()
+            or socket.is_symlink() or not socket.exists()
+            or not stat.S_ISSOCK(socket.stat().st_mode)):
+        return [], "Project-private PM2 unavailable"
+    # A stale socket must not cause PM2 CLI to spawn a replacement daemon.
+    pid_file = pm2_home / "pm2.pid"
+    try:
+        if pid_file.is_symlink():
+            return [], "Project-private PM2 unavailable"
+        daemon_pid = int(pid_file.read_text(encoding="ascii").strip())
+        if daemon_pid <= 1:
+            return [], "Project-private PM2 unavailable"
+        daemon_cmd = (Path("/proc") / str(daemon_pid) / "cmdline").read_bytes()
+        if b"PM2" not in daemon_cmd or str(pm2_home).encode() not in daemon_cmd:
+            return [], "Project-private PM2 unavailable"
+    except (OSError, ValueError):
+        return [], "Project-private PM2 unavailable"
     try:
         result = subprocess.run(
-            ["pm2", "jlist"], capture_output=True, text=True, timeout=8, check=False
+            ["/usr/bin/node", str(cli), "jlist"],
+            env=dict(os.environ, PM2_HOME=str(pm2_home)),
+            capture_output=True, text=True, timeout=8, check=False
         )
     except (OSError, subprocess.TimeoutExpired):
         return [], "PM2 unavailable or timed out"
@@ -232,7 +257,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--with-pm2", action="store_true",
-                        help="Explicitly query PM2 (can start a daemon in this user's namespace)")
+                        help="Query only the existing project-private PM2 daemon")
     parser.add_argument("--no-pm2", action="store_true",
                         help="Compatibility option; PM2 is skipped by default")
     args = parser.parse_args()

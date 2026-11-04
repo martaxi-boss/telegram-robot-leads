@@ -440,7 +440,7 @@ def main() -> int:
     parser.add_argument("--events", type=Path, default=DEFAULT_EVENT_JOURNAL)
     parser.add_argument("--expected-source", type=str)
     parser.add_argument("--with-pm2", action="store_true",
-                        help="Opt in to PM2 query (may start a daemon for this user)")
+                        help="Query only the existing project-private PM2 daemon")
     parser.add_argument("--no-pm2", action="store_true",
                         help="Compatibility option; no PM2 query is the default")
     args = parser.parse_args()

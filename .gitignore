@@ -46,3 +46,6 @@ growth_metrics.lock
 /data/
 /archive/
 /optin/
+
+# Daemon PM2, dump, logs e sockets exclusivos desta instalacao VPS
+/.pm2/

@@ -1,0 +1,20 @@
+[Unit]
+Description=Telegram Robot Leads - isolated PM2 supervisor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=root
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin
+Environment=PM2_HOME=/srv/projects/telegram-robot-leads/.pm2
+PIDFile=/srv/projects/telegram-robot-leads/.pm2/pm2.pid
+ExecStart=/usr/bin/node /srv/projects/telegram-robot-leads/tools/pm2/bin/pm2 resurrect
+ExecReload=/usr/bin/node /srv/projects/telegram-robot-leads/tools/pm2/bin/pm2 reload all
+ExecStop=/usr/bin/node /srv/projects/telegram-robot-leads/tools/pm2/bin/pm2 kill
+TimeoutStartSec=90
+TimeoutStopSec=45
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

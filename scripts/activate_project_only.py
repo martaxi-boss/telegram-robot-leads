@@ -57,7 +57,7 @@ def _read_worker(pm2_home: Path, daemon_pid: int) -> dict:
     env = dict(os.environ, PM2_HOME=str(pm2_home))
     try:
         result = subprocess.run(
-            ["pm2", "jlist"], capture_output=True, text=True,
+            ["/usr/bin/node", str(ROOT / "tools/pm2/bin/pm2"), "jlist"], capture_output=True, text=True,
             env=env, timeout=9, check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -99,6 +99,8 @@ def activate(pm2_home: Path, expected_sha: str, *, apply: bool = False) -> dict:
         raise ActivationBlocked("installed_marker_invalid")
     if marker.read_text(encoding="ascii").strip() != expected_sha:
         raise ActivationBlocked("installed_commit_mismatch")
+    if pm2_home != ROOT / ".pm2":
+        raise ActivationBlocked("pm2_home_not_project_private")
     daemon_pid = _check_daemon_home(pm2_home)
     _read_worker(pm2_home, daemon_pid)
     if not apply:
@@ -111,7 +113,7 @@ def activate(pm2_home: Path, expected_sha: str, *, apply: bool = False) -> dict:
     # settings untouched. Only the ONE validated project process restarts.
     try:
         restarted = subprocess.run(
-            ["pm2", "restart", PROCESS], capture_output=True, text=True,
+            ["/usr/bin/node", str(ROOT / "tools/pm2/bin/pm2"), "restart", PROCESS], capture_output=True, text=True,
             env=env, timeout=18, check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:

@@ -107,6 +107,19 @@ def read_pm2() -> tuple[list[dict[str, Any]], str | None]:
             or socket.is_symlink() or not socket.exists()
             or not stat.S_ISSOCK(socket.stat().st_mode)):
         return [], "Project-private PM2 unavailable"
+    # A stale socket must not cause PM2 CLI to spawn a replacement daemon.
+    pid_file = pm2_home / "pm2.pid"
+    try:
+        if pid_file.is_symlink():
+            return [], "Project-private PM2 unavailable"
+        daemon_pid = int(pid_file.read_text(encoding="ascii").strip())
+        if daemon_pid <= 1:
+            return [], "Project-private PM2 unavailable"
+        daemon_cmd = (Path("/proc") / str(daemon_pid) / "cmdline").read_bytes()
+        if b"PM2" not in daemon_cmd or str(pm2_home).encode() not in daemon_cmd:
+            return [], "Project-private PM2 unavailable"
+    except (OSError, ValueError):
+        return [], "Project-private PM2 unavailable"
     try:
         result = subprocess.run(
             ["/usr/bin/node", str(cli), "jlist"],
